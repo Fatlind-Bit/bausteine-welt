@@ -72,8 +72,10 @@ p { margin: 6px 0; }
 
 /* Farben antippen */
 .tapholder { display: flex; gap: 12px; align-items: center; font-size: 1.05rem; padding: 10px 14px; }
-.tapholder .face { flex: 0 0 64px; height: 64px; border-radius: 12px; background: #222; display: grid; place-items: center; }
-.tapholder .face div { width: 26px; height: 26px; border-radius: 6px; border: 2px solid #0004; }
+.tapholder .pic { flex: 0 0 170px; width: 170px; height: 164px; }
+.tapholder .say { font-size: 1.25rem; font-weight: 800; line-height: 1.5; }
+.tapholder .say .mini { width: 1.2em; height: 1.2em; }
+@media (max-width: 400px) { .tapholder .pic { flex-basis: 140px; width: 140px; height: 135px; } .tapholder .say { font-size: 1.1rem; } .tapholder { gap: 6px; padding: 8px; } }
 .chipc { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; white-space: nowrap; }
 .bigface { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: min(300px, 80vw); margin: 8px auto; background: #222; padding: 8px; border-radius: 18px; }
 .bigface button { aspect-ratio: 1; border-radius: 12px; border: 3px solid #0006; cursor: pointer; touch-action: manipulation; font-size: 1.6rem; color: #777; padding: 0; }
@@ -3288,12 +3290,53 @@ buildNet();
 const TAP_ORDER = ['F', 'R', 'B', 'L', 'U', 'D'];
 let tapStep = 0;
 const chip = (c) => `<span class="chipc"><span class="mini" style="background:${PAL[c].hex}"></span>${PAL[c].name}</span>`;
+// Welche Mitten sieht man auf dem Bild? (vorne, oben, rechts, unten) – passend zum Halten
+const TAP_VIEW = {
+  F: { front: 'F', top: 'U', right: 'R' },
+  R: { front: 'R', top: 'U', right: 'B', turn: 'left' },
+  B: { front: 'B', top: 'U', right: 'L', turn: 'left' },
+  L: { front: 'L', top: 'U', right: 'F', turn: 'left' },
+  U: { front: 'U', top: 'B', right: 'R', bottom: 'F', turn: 'tipToMe' },
+  D: { front: 'D', top: 'F', right: 'R', turn: 'tipAway' },
+};
+function cubePic(face) {
+  const v = TAP_VIEW[face], col = (f) => PAL[K.SCHEME[f]].hex, grey = '#7d7893', st = 'stroke="#1d1638" stroke-width="2" stroke-linejoin="round"';
+  let s = '';
+  // vorne: 3x3 Quadrate
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    s += `<rect x="${22 + c * 28}" y="${48 + r * 28}" width="28" height="28" rx="3" fill="${r === 1 && c === 1 ? col(v.front) : grey}" ${st}/>`;
+  }
+  // oben: schräg nach hinten
+  const dx = 11, dy = -9;
+  for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) {
+    const x = 22 + c * 28 + k * dx, y = 48 + k * dy;
+    s += `<polygon points="${x},${y} ${x + 28},${y} ${x + 28 + dx},${y + dy} ${x + dx},${y + dy}" fill="${k === 1 && c === 1 ? col(v.top) : grey}" ${st}/>`;
+  }
+  // rechts
+  for (let k = 0; k < 3; k++) for (let r = 0; r < 3; r++) {
+    const x = 106 + k * dx, y = 48 + r * 28 + k * dy;
+    s += `<polygon points="${x},${y} ${x + dx},${y + dy} ${x + dx},${y + dy + 28} ${x},${y + 28}" fill="${k === 1 && r === 1 ? col(v.right) : grey}" ${st}/>`;
+  }
+  // Augen: das bist du
+  s += `<text x="64" y="156" text-anchor="middle" font-size="20">👀</text>`;
+  if (v.bottom) s += `<rect x="36" y="136" width="56" height="7" rx="3" fill="${col(v.bottom)}" ${st}/>`;
+  const arrow = 'fill="none" stroke="#ff2e88" stroke-width="6" stroke-linecap="round"';
+  if (v.turn === 'left') s += `<path d="M128 14 Q80 -2 36 14" ${arrow}/><polygon points="24,18 44,6 44,24" fill="#ff2e88"/>`;
+  if (v.turn === 'tipToMe') s += `<path d="M146 20 Q160 60 146 100" ${arrow}/><polygon points="138,98 156,96 146,114" fill="#ff2e88"/>`;
+  if (v.turn === 'tipAway') s += `<path d="M146 100 Q160 60 146 20" ${arrow}/><polygon points="138,22 156,24 146,6" fill="#ff2e88"/>`;
+  return `<svg class="pic" viewBox="0 -4 166 160" role="img" aria-label="So hältst du den Würfel">${s}</svg>`;
+}
+const dotC = (f) => `<span class="mini" style="background:${PAL[K.SCHEME[f]].hex}"></span> ${PAL[K.SCHEME[f]].name}`;
 function tapHoldText(face) {
-  const sc = K.SCHEME, me = sc[face];
-  const turn = { R: 'Drehe den ganzen Würfel einmal nach links. ', B: 'Noch einmal nach links drehen. ', L: 'Noch einmal nach links drehen. ' }[face] || '';
-  if (face === 'U') return `Kippe den Würfel: ${chip(me)} schaut zu dir, ${chip(sc.F)} zeigt nach <b>unten</b>.`;
-  if (face === 'D') return `Kippe den Würfel andersrum: ${chip(me)} schaut zu dir, ${chip(sc.F)} zeigt nach <b>oben</b>.`;
-  return `${turn}${chip(me)} schaut zu dir, ${chip(sc.U)} ist <b>oben</b>.`;
+  const v = TAP_VIEW[face];
+  const lines = [];
+  if (v.turn === 'left') lines.push('⬅ Dreh nach links');
+  if (v.turn === 'tipToMe') lines.push(`↩ ${dotC('F')} nach vorne,<br>dann ⤵ kipp zu dir`);
+  if (v.turn === 'tipAway') lines.push(`↩ ${dotC('F')} nach vorne,<br>dann ⤴ kipp weg von dir`);
+  lines.push(`👀 ${dotC(face)}`);
+  if (face === 'U') lines.push(`⬇ unten: ${dotC('F')}`);
+  else lines.push(`⬆ oben: ${dotC(v.top)}`);
+  return lines.join('<br>');
 }
 function renderTap() {
   const face = TAP_ORDER[tapStep], fi = K.FACES.indexOf(face), me = K.SCHEME[face];
@@ -3302,7 +3345,7 @@ function renderTap() {
     const full = S.colors.slice(K.FACES.indexOf(f) * 9, K.FACES.indexOf(f) * 9 + 9).every((c) => c >= 0);
     return `<div class="dot ${i === tapStep ? 'now' : ''}" style="background:${PAL[K.SCHEME[f]].hex}">${full ? '✓' : ''}</div>`;
   }).join('');
-  $('tap-hold').innerHTML = `<div class="face"><div style="background:${PAL[me].hex}"></div></div><div>${tapHoldText(face)}</div>`;
+  $('tap-hold').innerHTML = `${cubePic(face)}<div class="say">${tapHoldText(face)}</div>`;
   $('bigface').innerHTML = [...Array(9)].map((_, k) => {
     const c = S.colors[fi * 9 + k];
     return `<button data-k="${k}" class="${k === 4 ? 'center' : ''}" style="background:${c >= 0 ? PAL[c].hex : 'var(--empty)'}" aria-label="Kästchen ${k + 1}">${c >= 0 ? '' : '?'}</button>`;
