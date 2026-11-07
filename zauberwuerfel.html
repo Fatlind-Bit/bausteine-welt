@@ -154,7 +154,7 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   </div>
   <p class="status" id="solver-status" style="margin-top:14px">🧠 Das Löse-Gehirn wärmt sich auf …</p>
   <p class="small" style="text-align:center">🔒 Kamera und Fotos bleiben auf deinem Gerät. Nichts wird hochgeladen.</p>
-  <p class="small" style="text-align:center">Version 6</p>
+  <p class="small" style="text-align:center">Version 7</p>
 </section>
 
 <!-- ===== FARBEN ANTIPPEN (Seite für Seite) ===== -->
@@ -258,6 +258,7 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
     <button class="btn light" id="btn-restart">⟲ Von vorn</button>
     <button class="btn light" id="btn-edit">✏️ Würfel ändern</button>
   </div>
+  <button class="btn wide" id="btn-different" style="margin-top:10px">😕 Mein Würfel sieht anders aus – neu eingeben</button>
   <p class="small">Tipp: Du kannst den 3D-Würfel mit dem Finger drehen, um ihn von allen Seiten anzuschauen.</p>
   <div class="chips" id="chips"></div>
   <div class="card" id="testcard" style="display:none"><h2>Selbsttest</h2><div id="testlog"></div></div>
@@ -3244,7 +3245,8 @@ class Cube3D {
     c.addEventListener('pointercancel', up);
   }
   viewFace(f) {
-    const V = { U: [4, 6, 6], F: [4.3, 4, 6.8], R: [6, 3.6, 5.2], L: [-6, 3.6, 5.2], D: [4.3, -4.8, 6.2], B: [5.2, 3.8, -6] };
+    // Immer so, dass die vordere Seite zu sehen ist – wie das Kind den Würfel hält
+    const V = { U: [4, 6, 6], F: [4.3, 4, 6.8], R: [6, 3.6, 5.2], L: [-5, 3.8, 6.5], D: [4.3, -4.5, 6.5], B: [4.3, 5.5, 6.5] };
     this.camTarget.set(...V[f]).setLength(10);
   }
   setColors(colors) {
@@ -3282,7 +3284,7 @@ class Cube3D {
     class Arc extends THREE.Curve {
       getPoint(u, target = new THREE.Vector3()) { const a = a0 + dir * span * u; return target.set(r * Math.cos(a), r * Math.sin(a), 0); }
     }
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff2e88 });
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff2e88, depthTest: false, transparent: true, opacity: 0.95 });
     const g = new THREE.Group();
     g.add(new THREE.Mesh(new THREE.TubeGeometry(new Arc(), 48, 0.09, 10, false), mat));
     const aEnd = a0 + dir * span;
@@ -3295,6 +3297,7 @@ class Cube3D {
     const n = new THREE.Vector3(...K.NORMAL[move[0]]);
     g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
     g.position.copy(n).multiplyScalar(1.62);
+    g.traverse((o) => { o.renderOrder = 999; });
     this.arrow = g;
     this.scene.add(g);
   }
@@ -3373,11 +3376,12 @@ function startSolve(moves) {
   S.start = S.colors.slice();
   S.step = 0;
   S.playing = false;
+  S.confirmed = false;
   show('s-solve');
   const c = ensure3D();
   c.setColors(S.start);
   const fC = PAL[S.start[22]], uC = PAL[S.start[4]];
-  $('hold-hint').innerHTML = `<div style="font-size:1.6rem">✋</div><div>Immer so halten: <b>${fC.name}</b> <span class="mini" style="background:${fC.hex}"></span> zu dir, <b>${uC.name}</b> <span class="mini" style="background:${uC.hex}"></span> nach oben.</div>`;
+  $('hold-hint').innerHTML = `<div style="font-size:1.6rem">✋</div><div>Immer so halten: <b>${fC.name}</b> <span class="mini" style="background:${fC.hex}"></span> zu dir, <b>${uC.name}</b> <span class="mini" style="background:${uC.hex}"></span> nach oben. Nach jedem Schritt: <b>Sieht dein Würfel aus wie der 3D-Würfel?</b></div>`;
   $('chips').innerHTML = moves.map((m, i) => `<span class="chip" data-i="${i}">${m}</span>`).join('');
   renderStep();
 }
@@ -3387,6 +3391,17 @@ function renderStep() {
   $('btn-prev').disabled = k === 0 || S.busy;
   $('btn-next').disabled = k >= n || S.busy;
   $('btn-play').textContent = S.playing ? '⏸ Anhalten' : '▶ Alles abspielen';
+  $('btn-next').textContent = S.confirmed ? 'Weiter ▶' : '✅ Ja, gleich – los!';
+  $('btn-prev').textContent = S.confirmed ? '◀ Zurück' : '😕 Nein, anders';
+  if (!S.confirmed) {
+    $('btn-prev').disabled = false;
+    $('stepinfo').textContent = 'Zuerst vergleichen 👀';
+    $('movetext').innerHTML = 'Sieht dein Würfel <u>genau so</u> aus wie der 3D-Würfel? Schau vorne, oben und rechts. <span style="font-weight:600;font-size:1rem">(Den 3D-Würfel kannst du mit dem Finger drehen.)</span>';
+    $('bigarrow').innerHTML = '<div style="font-size:4rem;text-align:center">👀</div>';
+    cube3d.showArrow(null);
+    cube3d.camTarget.set(4.3, 4, 6.8).setLength(10);
+    return;
+  }
   document.querySelectorAll('#chips .chip').forEach((c) => {
     const i = +c.dataset.i;
     c.className = 'chip' + (i < k ? ' done' : i === k ? ' cur' : '');
@@ -3421,12 +3436,19 @@ async function prev() {
   await cube3d.turn(K.invertMove(S.solution[S.step]));
   S.busy = false; renderStep();
 }
-$('btn-next').onclick = () => next();
-$('btn-prev').onclick = () => prev();
+$('btn-next').onclick = () => { if (!S.confirmed) { S.confirmed = true; renderStep(); return; } next(); };
+$('btn-prev').onclick = () => { if (!S.confirmed) { reenter('Gib deinen Würfel nochmal ein, ganz genau so, wie er vor dir liegt. Dann klappt es!'); return; } prev(); };
+async function reenter(text) {
+  S.playing = false;
+  if (!(await ask(text, 'Okay, neu eingeben', 'Abbrechen'))) return;
+  $('go-tap').onclick();
+}
+$('btn-different').onclick = () => reenter('Kein Problem! Gib deinen Würfel nochmal ein, so wie er JETZT aussieht – grün zu dir, weiß oben. Dann rechne ich einen neuen Weg aus.');
 $('btn-restart').onclick = () => { if (S.busy) return; S.playing = false; S.step = 0; cube3d.setColors(S.start); renderStep(); };
 $('btn-edit').onclick = () => { S.playing = false; S.colors = S.start.slice(); openEdit(''); };
 $('btn-play').onclick = async () => {
   if (S.playing) { S.playing = false; renderStep(); return; }
+  S.confirmed = true;
   if (S.step >= S.solution.length) { S.step = 0; cube3d.setColors(S.start); }
   S.playing = true; renderStep();
   while (S.playing && S.step < S.solution.length) {
@@ -3610,6 +3632,7 @@ async function selfTest() {
     const modelOk = K.isSolved(K.applyMoves(colors, sol));
     S.colors = colors;
     startSolve(sol);
+    S.confirmed = true;
     const before = cube3d.readColors();
     const readOk = before.every((c, i) => c === colors[i]) && !K.isSolved(before);
     const speed = results.length === 0 ? 40 : 0; // erster Fall mit echter Animation
