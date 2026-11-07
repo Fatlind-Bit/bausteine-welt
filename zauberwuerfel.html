@@ -154,6 +154,7 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   </div>
   <p class="status" id="solver-status" style="margin-top:14px">🧠 Das Löse-Gehirn wärmt sich auf …</p>
   <p class="small" style="text-align:center">🔒 Kamera und Fotos bleiben auf deinem Gerät. Nichts wird hochgeladen.</p>
+  <p class="small" style="text-align:center">Version 6</p>
 </section>
 
 <!-- ===== FARBEN ANTIPPEN (Seite für Seite) ===== -->
@@ -2694,39 +2695,83 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   }
 
   // ----- Fehler-Helfer: kleinste Änderung finden, die den Würfel lösbar macht -----
+  function diffOf(a, b) { var d = []; for (var j = 0; j < 54; j++) if (a[j] !== b[j]) d.push(j); return d; }
+  function swaps(colors, cb) {
+    for (var a = 0; a < 54; a++) {
+      if (a % 9 === 4) continue;
+      for (var b = a + 1; b < 54; b++) {
+        if (b % 9 === 4 || colors[a] === colors[b]) continue;
+        var c = colors.slice(); c[a] = colors[b]; c[b] = colors[a];
+        if (validate(c).ok && cb(c, a, b) === false) return;
+      }
+    }
+  }
+  // Einfache Fehler: eine Seite gedreht, zwei Kästchen vertauscht, mehrere Seiten gedreht, Seite gedreht + Tausch
+  function basicRepairs(colors, quick) {
+    var out = [], f, r, c, k;
+    for (f = 0; f < 6; f++) {
+      c = colors;
+      for (r = 1; r < 4; r++) { c = rotateFaceCW(c, f); if (validate(c).ok) out.push({ kind: 'rotate', face: f, colors: c }); }
+    }
+    var sw = [];
+    swaps(colors, function (c2, a, b) { sw.push({ kind: 'swap', colors: c2, same: Math.floor(a / 9) === Math.floor(b / 9) }); return sw.length < 400; });
+    // Tausch auf derselben Seite ist wahrscheinlicher (einmal falsch getippt)
+    sw.sort(function (x, y) { return (y.same ? 1 : 0) - (x.same ? 1 : 0); });
+    out = out.concat(sw);
+    if (out.length || quick) return out;
+    for (var want = 2; want <= 3 && !out.length; want++) {
+      for (var code = 0; code < 4096 && out.length < 30; code++) {
+        var q = code, n = 0; c = colors;
+        for (f = 0; f < 6; f++) { r = q % 4; q = Math.floor(q / 4); if (r) n++; for (k = 0; k < r; k++) c = rotateFaceCW(c, f); }
+        if (n === want && validate(c).ok) out.push({ kind: 'rotate2', colors: c });
+      }
+    }
+    if (out.length) return out;
+    for (f = 0; f < 6 && out.length < 30; f++) {
+      c = colors;
+      for (r = 1; r < 4 && out.length < 30; r++) {
+        c = rotateFaceCW(c, f);
+        swaps(c, function (c2) { out.push({ kind: 'rotateswap', face: f, colors: c2 }); return out.length < 30; });
+      }
+    }
+    return out;
+  }
+  // Würfel mit anderer Farbverteilung: Seiten-Blöcke (rechts/hinten/links, oben/unten) vertauschen
+  function sideVariants(colors) {
+    var perms = [[1, 5, 4], [1, 4, 5], [5, 1, 4], [5, 4, 1], [4, 1, 5], [4, 5, 1]];
+    var out = [];
+    perms.forEach(function (p, pi) {
+      [false, true].forEach(function (swapUD) {
+        if (pi === 0 && !swapUD) return;
+        var src = [0, 1, 2, 3, 4, 5];
+        src[1] = p[0]; src[5] = p[1]; src[4] = p[2];
+        if (swapUD) { src[0] = 3; src[3] = 0; }
+        var c = [];
+        for (var f = 0; f < 6; f++) for (var k = 0; k < 9; k++) c.push(colors[src[f] * 9 + k]);
+        out.push(c);
+      });
+    });
+    return out;
+  }
   // Gibt eine Liste von Vorschlägen zurück (die einfachsten zuerst), oder [] wenn nichts gefunden
   function findRepairs(colors) {
     if (validate(colors).ok) return [];
     var cnt = [0, 0, 0, 0, 0, 0];
     for (var i = 0; i < 54; i++) { if (!(colors[i] >= 0)) return []; cnt[colors[i]]++; }
     if (cnt.some(function (n) { return n !== 9; })) return [];
-    var diff = function (c) { var d = []; for (var j = 0; j < 54; j++) if (c[j] !== colors[j]) d.push(j); return d; };
-    var out = [], f, r, c;
-    // 1) Eine Seite gedreht eingegeben?
-    for (f = 0; f < 6; f++) {
-      c = colors;
-      for (r = 1; r < 4; r++) {
-        c = rotateFaceCW(c, f);
-        if (validate(c).ok) out.push({ kind: 'rotate', face: f, colors: c, changed: diff(c) });
-      }
-    }
-    // 2) Zwei Kästchen vertauscht?
-    for (var a = 0; a < 54; a++) {
-      if (a % 9 === 4) continue;
-      for (var b = a + 1; b < 54; b++) {
-        if (b % 9 === 4 || colors[a] === colors[b]) continue;
-        c = colors.slice(); c[a] = colors[b]; c[b] = colors[a];
-        if (validate(c).ok) out.push({ kind: 'swap', colors: c, changed: [a, b] });
-      }
-    }
-    if (out.length) return out.slice(0, 30);
-    // 3) Zwei Seiten gedreht?
-    for (var code = 0; code < 4096 && out.length < 30; code++) {
-      var q = code, n = 0; c = colors;
-      for (f = 0; f < 6; f++) { r = q % 4; q = Math.floor(q / 4); if (r) n++; for (var k = 0; k < r; k++) c = rotateFaceCW(c, f); }
-      if (n === 2 && validate(c).ok) out.push({ kind: 'rotate2', colors: c, changed: diff(c) });
-    }
-    return out;
+    var fin = function (list) { return list.slice(0, 400).map(function (x) { x.changed = diffOf(x.colors, colors); return x; }); };
+    var variants = sideVariants(colors), out = [];
+    // 0) Andere Farbverteilung als üblich (z. B. Rot und Orange vertauscht)?
+    variants.forEach(function (v) { if (validate(v).ok) out.push({ kind: 'scheme', colors: v }); });
+    if (out.length) return fin(out);
+    out = basicRepairs(colors, false);
+    if (out.length) return fin(out);
+    // Andere Farbverteilung UND ein einfacher Fehler
+    variants.forEach(function (v) {
+      if (out.length >= 30) return;
+      basicRepairs(v, true).forEach(function (x) { x.kind = 'scheme+' + x.kind; out.push(x); });
+    });
+    return fin(out);
   }
 
   // ----- Zufälliges Mischen -----
@@ -3061,10 +3106,18 @@ $('btn-clear').onclick = async () => { if (await ask('Wirklich alle Farben lösc
 $('btn-home').onclick = () => show('s-start');
 $('btn-check').onclick = checkAndSolve;
 
+const LETTERS = 'WYROBG';
+const colorsToCode = (c) => c.map((x) => (x >= 0 ? LETTERS[x] : '-')).join('');
+function codeBox() {
+  const code = colorsToCode(S.colors);
+  return `<details style="margin-top:8px"><summary>Code für Papa oder Claude (zum Schicken)</summary>
+    <p style="font-family:ui-monospace,Consolas,monospace;word-break:break-all;font-size:.85rem">${code}</p>
+    <button class="btn light" onclick="navigator.clipboard && navigator.clipboard.writeText('${code}').then(() => { this.textContent = '✅ Kopiert!'; })">📋 Code kopieren</button></details>`;
+}
 function showProblems(v) {
   badCells = new Set(v.problems.flatMap((p) => p.cells));
   renderNet();
-  setMsg(`<h2>🤔 Da stimmt etwas nicht</h2><ul>${v.problems.map((p) => `<li>${p.text}</li>`).join('')}</ul><p>Vergleiche mit deinem Würfel und tippe falsche Felder hier im Plan an – oder geh auf <b>„🎨 Seiten antippen“</b>.</p>`, 'problems');
+  setMsg(`<h2>🤔 Da stimmt etwas nicht</h2><ul>${v.problems.map((p) => `<li>${p.text}</li>`).join('')}</ul><p>Vergleiche mit deinem Würfel und tippe falsche Felder hier im Plan an – oder geh auf <b>„🎨 Seiten antippen“</b>.</p>${codeBox()}`, 'problems');
   $('edit-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 // Fehler-Helfer: Vorschlag zeigen, das Kind vergleicht mit dem echten Würfel
@@ -3074,12 +3127,15 @@ function showRepair(list, idx, orig) {
   badCells = new Set(fix.changed);
   renderNet();
   let what;
-  if (fix.kind === 'rotate') what = `Ich glaube, die Seite mit der <b>${PAL[orig[fix.face * 9 + 4]].adj}n Mitte</b> war verdreht eingegeben. Ich habe sie gedreht.`;
+  if (fix.kind === 'scheme') what = 'Dein Würfel hat die Farben an <b>anderen Stellen</b> als die meisten Würfel (zum Beispiel Rot und Orange andersrum). Kein Problem – ich habe es angepasst!';
+  else if (fix.kind.startsWith('scheme+')) what = 'Dein Würfel hat die Farben an <b>anderen Stellen</b> als die meisten Würfel – und dazu war noch eine Kleinigkeit falsch. Ich habe beides angepasst.';
+  else if (fix.kind === 'rotateswap') what = 'Ich glaube, <b>eine Seite war verdreht</b> und <b>zwei Kästchen vertauscht</b>. Ich habe es angepasst.';
+  else if (fix.kind === 'rotate') what = `Ich glaube, die Seite mit der <b>${PAL[orig[fix.face * 9 + 4]].adj}n Mitte</b> war verdreht eingegeben. Ich habe sie gedreht.`;
   else if (fix.kind === 'swap') what = 'Ich glaube, <b>zwei Kästchen</b> waren vertauscht. Ich habe sie getauscht.';
   else what = 'Ich glaube, <b>zwei Seiten</b> waren verdreht eingegeben. Ich habe sie gedreht.';
   const more = list.length > 1 ? `<button class="btn light" id="fix-next">🔄 Anderer Vorschlag (${idx + 1} von ${list.length})</button>` : '';
   setMsg(`<h2>🔧 Ich habe den Fehler gefunden!</h2><p>${what}</p><p>Die <b>blinkenden Kästchen</b> im Plan oben habe ich geändert. Schau auf deinen echten Würfel: <b>Sieht es jetzt genau so aus?</b></p>
-    <div class="stack"><button class="btn big green" id="fix-yes">✅ Ja, so ist es – lösen!</button>${more}<button class="btn light" id="fix-no">✖ Nein, ich suche selbst</button></div>`, 'okbox');
+    <div class="stack"><button class="btn big green" id="fix-yes">✅ Ja, so ist es – lösen!</button>${more}<button class="btn light" id="fix-no">✖ Nein, ich suche selbst</button></div>${codeBox()}`, 'okbox');
   $('net').scrollIntoView({ behavior: 'smooth', block: 'start' });
   $('fix-yes').onclick = () => { badCells = new Set(); renderNet(); checkAndSolve(); };
   if (more) $('fix-next').onclick = () => showRepair(list, (idx + 1) % list.length, orig);
@@ -3579,6 +3635,10 @@ async function selfTest() {
 }
 if (new URLSearchParams(location.search).has('selbsttest')) selfTest();
 if (new URLSearchParams(location.search).has('scan')) startOldScan();
+{
+  const code = (new URLSearchParams(location.search).get('code') || '').toUpperCase();
+  if (/^[WYROBG]{54}$/.test(code)) { S.colors = [...code].map((ch) => LETTERS.indexOf(ch)); openEdit('Würfel aus dem Code geladen.'); }
+}
 window.__app = { S, K, startSolve, next, prev, checkAndSolve, ensure3D };
 </script>
 </body>
