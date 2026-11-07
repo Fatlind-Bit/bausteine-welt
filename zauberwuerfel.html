@@ -70,6 +70,18 @@ p { margin: 6px 0; }
 .howto { display: flex; gap: 12px; align-items: center; }
 .howto svg { flex: 0 0 76px; }
 
+/* Farben antippen */
+.tapholder { display: flex; gap: 12px; align-items: center; font-size: 1.05rem; padding: 10px 14px; }
+.tapholder .face { flex: 0 0 64px; height: 64px; border-radius: 12px; background: #222; display: grid; place-items: center; }
+.tapholder .face div { width: 26px; height: 26px; border-radius: 6px; border: 2px solid #0004; }
+.chipc { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; white-space: nowrap; }
+.bigface { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: min(300px, 80vw); margin: 8px auto; background: #222; padding: 8px; border-radius: 18px; }
+.bigface button { aspect-ratio: 1; border-radius: 12px; border: 3px solid #0006; cursor: pointer; touch-action: manipulation; font-size: 1.6rem; color: #777; padding: 0; }
+.bigface button.center { cursor: default; outline: 4px dashed #fff8; outline-offset: -10px; }
+.bigpal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.bigpal button { min-height: 64px; border-radius: 16px; border: 3px solid #0004; font: inherit; font-weight: 800; cursor: pointer; touch-action: manipulation; box-shadow: 0 4px 0 rgba(0,0,0,.18); }
+.bigpal button.sel { outline: 5px solid var(--ink); outline-offset: 2px; }
+
 /* Netz */
 .net { display: grid; grid-template-columns: repeat(12, var(--cell)); grid-template-rows: repeat(9, var(--cell)); gap: 3px; justify-content: center; --cell: min(44px, calc((100vw - 32px - 33px - 28px) / 12)); margin: 6px auto; }
 .cell { border: 2px solid rgba(0, 0, 0, .35); border-radius: 7px; padding: 0; cursor: pointer; touch-action: manipulation; }
@@ -128,12 +140,27 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   <h1>Zauberwürfel-Löser</h1>
   <p style="text-align:center">Zeig mir deinen verdrehten Würfel – ich zeige dir Schritt für Schritt, wie du ihn löst!</p>
   <div class="stack" style="margin-top:16px">
-    <button class="btn big" id="go-scan">📷 Mit der Kamera einlesen</button>
-    <button class="btn big light" id="go-manual">✏️ Farben selbst eintippen</button>
+    <button class="btn big green" id="go-tap">🎨 Farben antippen (am einfachsten)</button>
     <button class="btn big light" id="go-example">🎲 Beispiel-Würfel ausprobieren</button>
+    <button class="btn light" id="go-scan">📷 Mit der Kamera einlesen</button>
+    <button class="btn light" id="go-manual">🗺️ Ganzer Würfel-Plan (für Profis)</button>
   </div>
   <p class="status" id="solver-status" style="margin-top:14px">🧠 Das Löse-Gehirn wärmt sich auf …</p>
   <p class="small" style="text-align:center">🔒 Kamera und Fotos bleiben auf deinem Gerät. Nichts wird hochgeladen.</p>
+</section>
+
+<!-- ===== FARBEN ANTIPPEN (Seite für Seite) ===== -->
+<section id="s-tap" class="screen">
+  <h2 id="tap-title">Seite 1 von 6</h2>
+  <div class="dots" id="tap-dots"></div>
+  <div class="card tapholder" id="tap-hold"></div>
+  <div class="bigface" id="bigface"></div>
+  <p class="small" style="text-align:center;margin:4px 0 8px">1. Farbe unten antippen&nbsp;&nbsp;2. Kästchen antippen</p>
+  <div class="bigpal" id="bigpal"></div>
+  <div class="row" style="margin-top:14px">
+    <button class="btn big light" id="tap-back">⬅ Zurück</button>
+    <button class="btn big green" id="tap-next">Weiter ➡</button>
+  </div>
 </section>
 
 <!-- ===== SCANNEN ===== -->
@@ -190,6 +217,7 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
       <div class="row" id="rot-buttons" style="margin-top:8px"></div>
     </details>
     <div class="row">
+      <button class="btn light" id="btn-tapmode">🎨 Seiten antippen</button>
       <button class="btn light" id="btn-example">🎲 Beispiel</button>
       <button class="btn light" id="btn-clear">🧹 Leeren</button>
       <button class="btn light" id="btn-home">🏠 Start</button>
@@ -2958,7 +2986,7 @@ async function checkAndSolve() {
   if (!v.ok) {
     badCells = new Set(v.problems.flatMap((p) => p.cells));
     renderNet();
-    setMsg(`<h2>🤔 Da stimmt etwas nicht</h2><ul>${v.problems.map((p) => `<li>${p.text}</li>`).join('')}</ul>`, 'problems');
+    setMsg(`<h2>🤔 Da stimmt etwas nicht</h2><ul>${v.problems.map((p) => `<li>${p.text}</li>`).join('')}</ul><p>Vergleiche mit deinem Würfel und tippe falsche Felder hier im Plan an – oder geh auf <b>„🎨 Seiten antippen“</b>.</p>`, 'problems');
     $('edit-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
@@ -3251,6 +3279,62 @@ $('btn-play').onclick = async () => {
 };
 
 buildNet();
+
+/* ---------- Farben antippen: Seite für Seite ---------- */
+const TAP_ORDER = ['F', 'R', 'B', 'L', 'U', 'D'];
+let tapStep = 0;
+const chip = (c) => `<span class="chipc"><span class="mini" style="background:${PAL[c].hex}"></span>${PAL[c].name}</span>`;
+function tapHoldText(face) {
+  const sc = K.SCHEME, me = sc[face];
+  const turn = { R: 'Drehe den ganzen Würfel einmal nach links. ', B: 'Noch einmal nach links drehen. ', L: 'Noch einmal nach links drehen. ' }[face] || '';
+  if (face === 'U') return `Kippe den Würfel: ${chip(me)} schaut zu dir, ${chip(sc.F)} zeigt nach <b>unten</b>.`;
+  if (face === 'D') return `Kippe den Würfel andersrum: ${chip(me)} schaut zu dir, ${chip(sc.F)} zeigt nach <b>oben</b>.`;
+  return `${turn}${chip(me)} schaut zu dir, ${chip(sc.U)} ist <b>oben</b>.`;
+}
+function renderTap() {
+  const face = TAP_ORDER[tapStep], fi = K.FACES.indexOf(face), me = K.SCHEME[face];
+  $('tap-title').textContent = `Seite ${tapStep + 1} von 6: die ${PAL[me].adj} Mitte`;
+  $('tap-dots').innerHTML = TAP_ORDER.map((f, i) => {
+    const full = S.colors.slice(K.FACES.indexOf(f) * 9, K.FACES.indexOf(f) * 9 + 9).every((c) => c >= 0);
+    return `<div class="dot ${i === tapStep ? 'now' : ''}" style="background:${PAL[K.SCHEME[f]].hex}">${full ? '✓' : ''}</div>`;
+  }).join('');
+  $('tap-hold').innerHTML = `<div class="face"><div style="background:${PAL[me].hex}"></div></div><div>${tapHoldText(face)}</div>`;
+  $('bigface').innerHTML = [...Array(9)].map((_, k) => {
+    const c = S.colors[fi * 9 + k];
+    return `<button data-k="${k}" class="${k === 4 ? 'center' : ''}" style="background:${c >= 0 ? PAL[c].hex : 'var(--empty)'}" aria-label="Kästchen ${k + 1}">${c >= 0 ? '' : '?'}</button>`;
+  }).join('');
+  $('bigpal').innerHTML = PAL.map((p) => `<button data-c="${p.id}" class="${p.id === S.paint ? 'sel' : ''}" style="background:${p.hex};color:${p.id <= 1 || p.id === 3 ? '#1d1638' : '#fff'}">${p.name}</button>`).join('');
+  const full = S.colors.slice(fi * 9, fi * 9 + 9).every((c) => c >= 0);
+  $('tap-next').disabled = !full;
+  $('tap-next').textContent = tapStep === 5 ? '✅ Fertig – lösen!' : 'Weiter ➡';
+}
+$('bigface').onclick = (e) => {
+  const b = e.target.closest('[data-k]');
+  if (!b || +b.dataset.k === 4) return;
+  S.colors[K.FACES.indexOf(TAP_ORDER[tapStep]) * 9 + +b.dataset.k] = S.paint;
+  renderTap();
+};
+$('bigpal').onclick = (e) => {
+  const b = e.target.closest('[data-c]');
+  if (!b) return;
+  S.paint = +b.dataset.c;
+  renderTap();
+};
+$('tap-back').onclick = () => { if (tapStep > 0) { tapStep--; renderTap(); window.scrollTo(0, 0); } else show('s-start'); };
+$('tap-next').onclick = () => {
+  if (tapStep < 5) { tapStep++; renderTap(); window.scrollTo(0, 0); return; }
+  S.scrambleText = '';
+  openEdit('');
+  checkAndSolve();
+};
+$('btn-tapmode').onclick = () => { tapStep = 0; show('s-tap'); renderTap(); };
+$('go-tap').onclick = () => {
+  S.colors = new Array(54).fill(-1);
+  K.FACES.forEach((f, fi) => { S.colors[fi * 9 + 4] = K.SCHEME[f]; });
+  tapStep = 0;
+  show('s-tap');
+  renderTap();
+};
 
 /* ---------- Selbsttest: ?selbsttest ---------- */
 async function selfTest() {
