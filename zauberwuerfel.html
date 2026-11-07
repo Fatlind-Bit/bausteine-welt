@@ -81,6 +81,9 @@ p { margin: 6px 0; }
 .bigpal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .bigpal button { min-height: 64px; border-radius: 16px; border: 3px solid #0004; font: inherit; font-weight: 800; cursor: pointer; touch-action: manipulation; box-shadow: 0 4px 0 rgba(0,0,0,.18); }
 .bigpal button.sel { outline: 5px solid var(--ink); outline-offset: 2px; }
+.bigpal button small { display: block; font-size: .85rem; font-weight: 700; }
+.bigpal button.over { box-shadow: 0 0 0 4px var(--warn); }
+.tapwarn { border: 3px solid var(--warn); font-weight: 700; }
 
 /* Netz */
 .net { display: grid; grid-template-columns: repeat(12, var(--cell)); grid-template-rows: repeat(9, var(--cell)); gap: 3px; justify-content: center; --cell: min(44px, calc((100vw - 32px - 33px - 28px) / 12)); margin: 6px auto; }
@@ -157,6 +160,7 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   <div class="bigface" id="bigface"></div>
   <p class="small" style="text-align:center;margin:4px 0 8px">1. Farbe unten antippen&nbsp;&nbsp;2. Kästchen antippen</p>
   <div class="bigpal" id="bigpal"></div>
+  <div id="tap-warn"></div>
   <div class="row" style="margin-top:14px">
     <button class="btn big light" id="tap-back">⬅ Zurück</button>
     <button class="btn big green" id="tap-next">Weiter ➡</button>
@@ -3303,7 +3307,11 @@ function renderTap() {
     const c = S.colors[fi * 9 + k];
     return `<button data-k="${k}" class="${k === 4 ? 'center' : ''}" style="background:${c >= 0 ? PAL[c].hex : 'var(--empty)'}" aria-label="Kästchen ${k + 1}">${c >= 0 ? '' : '?'}</button>`;
   }).join('');
-  $('bigpal').innerHTML = PAL.map((p) => `<button data-c="${p.id}" class="${p.id === S.paint ? 'sel' : ''}" style="background:${p.hex};color:${p.id <= 1 || p.id === 3 ? '#1d1638' : '#fff'}">${p.name}</button>`).join('');
+  const cnt = [0, 0, 0, 0, 0, 0];
+  S.colors.forEach((c) => { if (c >= 0) cnt[c]++; });
+  $('bigpal').innerHTML = PAL.map((p) => `<button data-c="${p.id}" class="${p.id === S.paint ? 'sel' : ''} ${cnt[p.id] > 9 ? 'over' : ''}" style="background:${p.hex};color:${p.id <= 1 || p.id === 3 ? '#1d1638' : '#fff'}">${p.name}<small>${cnt[p.id]} von 9${cnt[p.id] > 9 ? ' ⚠️' : cnt[p.id] === 9 ? ' ✓' : ''}</small></button>`).join('');
+  const over = PAL.filter((p) => cnt[p.id] > 9);
+  $('tap-warn').innerHTML = over.length ? `<div class="card tapwarn">⚠️ ${over.map((p) => `${p.name} gibt es schon ${cnt[p.id]}×`).join(', ')} – es dürfen nur 9 sein! Schau nochmal genau: Ein Kästchen hat die falsche Farbe. (Weiß und Gelb sehen manchmal ähnlich aus.)</div>` : '';
   const full = S.colors.slice(fi * 9, fi * 9 + 9).every((c) => c >= 0);
   $('tap-next').disabled = !full;
   $('tap-next').textContent = tapStep === 5 ? '✅ Fertig – lösen!' : 'Weiter ➡';
