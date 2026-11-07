@@ -1,0 +1,3303 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#6c3cf0">
+<title>Zauberwürfel-Löser</title>
+<style>
+:root {
+  --bg: #f3efff;
+  --card: #ffffff;
+  --ink: #1d1638;
+  --muted: #5d5680;
+  --brand: #6c3cf0;
+  --brand-ink: #ffffff;
+  --ok: #12a150;
+  --warn: #e4572e;
+  --line: #ddd5f7;
+  --empty: #c9c4d9;
+  --arrow: #ff2e88;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px; line-height: 1.4;
+  min-height: 100dvh;
+}
+main { max-width: 760px; margin: 0 auto; padding: 12px 16px 32px; }
+h1 { font-size: 1.7rem; margin: 8px 0 4px; text-align: center; }
+h2 { font-size: 1.3rem; margin: 6px 0; }
+p { margin: 6px 0; }
+.screen { display: none; }
+.screen.on { display: block; }
+.card { background: var(--card); border-radius: 20px; padding: 14px; box-shadow: 0 4px 16px rgba(60, 30, 140, .10); margin: 12px 0; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 56px; padding: 10px 18px; border: 0; border-radius: 16px;
+  background: var(--brand); color: var(--brand-ink); font: inherit; font-weight: 700;
+  cursor: pointer; touch-action: manipulation; user-select: none; text-decoration: none;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, .18);
+}
+.btn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0, 0, 0, .18); }
+.btn[disabled] { opacity: .45; cursor: default; }
+.btn.light { background: #ece6ff; color: var(--ink); }
+.btn.green { background: var(--ok); }
+.btn.big { min-height: 72px; font-size: 1.25rem; }
+.btn.wide { width: 100%; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row > .btn { flex: 1 1 140px; }
+.stack { display: grid; gap: 12px; }
+.small { font-size: .9rem; color: var(--muted); }
+.status { text-align: center; font-size: .95rem; color: var(--muted); }
+
+/* Start */
+.hero { text-align: center; font-size: 4rem; line-height: 1; margin-top: 8px; }
+
+/* Scannen */
+.dots { display: flex; gap: 8px; justify-content: center; margin: 4px 0 8px; }
+.dot { width: 34px; height: 34px; border-radius: 10px; border: 3px solid var(--line); background: var(--empty); display: grid; place-items: center; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.dot.now { border-color: var(--brand); }
+.camwrap { position: relative; width: 100%; max-width: 420px; aspect-ratio: 1; margin: 0 auto; border-radius: 20px; overflow: hidden; background: #222; }
+.camwrap video, .camwrap img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.grid3 { position: absolute; inset: 10%; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); border: 4px solid #fff; border-radius: 10px; box-shadow: 0 0 0 999px rgba(0, 0, 0, .35); pointer-events: none; }
+.grid3 div { border: 2px solid rgba(255, 255, 255, .85); }
+.camhint { position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; color: #fff; font-weight: 700; text-shadow: 0 1px 3px #000; font-size: .95rem; }
+.preview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; width: min(240px, 70vw); margin: 10px auto; background: #222; padding: 6px; border-radius: 14px; }
+.preview div { aspect-ratio: 1; border-radius: 8px; }
+.howto { display: flex; gap: 12px; align-items: center; }
+.howto svg { flex: 0 0 76px; }
+
+/* Netz */
+.net { display: grid; grid-template-columns: repeat(12, var(--cell)); grid-template-rows: repeat(9, var(--cell)); gap: 3px; justify-content: center; --cell: min(44px, calc((100vw - 32px - 33px - 28px) / 12)); margin: 6px auto; }
+.cell { border: 2px solid rgba(0, 0, 0, .35); border-radius: 7px; padding: 0; cursor: pointer; touch-action: manipulation; }
+.cell.center { border-width: 3px; border-color: #000; }
+.cell.bad { animation: blink .7s infinite alternate; }
+@keyframes blink { from { outline: 4px solid var(--warn); outline-offset: 1px; } to { outline: 4px solid transparent; } }
+.facelabel { font-size: .7rem; color: var(--muted); align-self: end; text-align: center; font-weight: 700; }
+.palette { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.swatch { aspect-ratio: 1; border-radius: 14px; border: 3px solid rgba(0, 0, 0, .3); cursor: pointer; position: relative; padding: 0; }
+.swatch.sel { border: 5px solid var(--ink); transform: scale(1.06); }
+.swatch .cnt { position: absolute; left: 0; right: 0; bottom: -22px; font-size: .8rem; font-weight: 700; }
+.counts { height: 18px; }
+.problems { border: 3px solid var(--warn); }
+.problems li { margin: 6px 0; }
+.okbox { border: 3px solid var(--ok); }
+details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
+
+/* Lösen */
+.stage { position: relative; width: 100%; height: min(52vh, 520px); min-height: 280px; border-radius: 20px; overflow: hidden; background: radial-gradient(circle at 50% 40%, #ffffff, #e2dafc); touch-action: none; }
+.stage canvas { display: block; width: 100%; height: 100%; }
+.movecard { display: flex; gap: 12px; align-items: center; min-height: 96px; padding: 10px 14px; }
+.movecard .bigarrow { flex: 0 0 80px; height: 80px; position: relative; }
+.movecard .bigarrow svg { width: 100%; height: 100%; }
+.movecard .x2 { position: absolute; right: -4px; bottom: -6px; background: var(--arrow); color: #fff; font-weight: 800; border-radius: 10px; padding: 0 6px; font-size: 1.1rem; }
+.movetext { font-size: 1.25rem; font-weight: 800; line-height: 1.25; }
+.stepinfo { color: var(--muted); font-size: .95rem; font-weight: 700; }
+.bar { height: 12px; background: #e6e0fa; border-radius: 8px; overflow: hidden; }
+.bar > div { height: 100%; width: 0; background: var(--ok); transition: width .3s; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.chip { padding: 3px 8px; border-radius: 8px; background: #ece6ff; font-weight: 700; font-size: .9rem; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.chip.done { background: #c9f1d8; color: #0b6a33; }
+.chip.cur { background: var(--arrow); color: #fff; }
+.party { text-align: center; font-size: 1.5rem; font-weight: 800; color: var(--ok); }
+.holdhint { display: flex; gap: 10px; align-items: center; font-size: .9rem; padding: 8px 12px; margin: 6px 0; }
+.mini { display: inline-block; width: 1.1em; height: 1.1em; border-radius: 4px; border: 2px solid #0005; vertical-align: -0.2em; }
+
+/* Ja/Nein-Fenster */
+.modal { position: fixed; inset: 0; background: rgba(20, 10, 50, .55); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
+.modal.on { display: flex; }
+.modal .card { max-width: 420px; width: 100%; }
+
+#testlog { white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; max-height: 50vh; overflow: auto; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+} }
+</script>
+</head>
+<body>
+<main>
+
+<!-- ===== START ===== -->
+<section id="s-start" class="screen on">
+  <div class="hero">🧊</div>
+  <h1>Zauberwürfel-Löser</h1>
+  <p style="text-align:center">Zeig mir deinen verdrehten Würfel – ich zeige dir Schritt für Schritt, wie du ihn löst!</p>
+  <div class="stack" style="margin-top:16px">
+    <button class="btn big" id="go-scan">📷 Mit der Kamera einlesen</button>
+    <button class="btn big light" id="go-manual">✏️ Farben selbst eintippen</button>
+    <button class="btn big light" id="go-example">🎲 Beispiel-Würfel ausprobieren</button>
+  </div>
+  <p class="status" id="solver-status" style="margin-top:14px">🧠 Das Löse-Gehirn wärmt sich auf …</p>
+  <p class="small" style="text-align:center">🔒 Kamera und Fotos bleiben auf deinem Gerät. Nichts wird hochgeladen.</p>
+</section>
+
+<!-- ===== SCANNEN ===== -->
+<section id="s-scan" class="screen">
+  <h2 id="scan-title">Seite 1 von 6</h2>
+  <div class="dots" id="scan-dots"></div>
+  <div class="card howto">
+    <svg id="scan-pic" viewBox="0 0 80 80" aria-hidden="true"></svg>
+    <p id="scan-text"></p>
+  </div>
+  <div class="camwrap" id="camwrap">
+    <video id="video" playsinline muted autoplay></video>
+    <img id="photo" alt="" style="display:none">
+    <div class="grid3"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="camhint" id="camhint">Würfel genau ins Gitter halten</div>
+  </div>
+  <p class="small" id="cam-msg" style="text-align:center"></p>
+
+  <div id="scan-live" class="stack" style="margin-top:10px">
+    <button class="btn big green" id="btn-shot">📸 Foto machen</button>
+    <label class="btn light" for="file">🖼️ Foto auswählen</label>
+    <input type="file" id="file" accept="image/*" hidden>
+  </div>
+  <div id="scan-check" style="display:none">
+    <p style="text-align:center;font-weight:700;margin-top:10px">Habe ich die Farben richtig erkannt?</p>
+    <div class="preview" id="scan-preview"></div>
+    <p class="small" style="text-align:center">Kleine Fehler kannst du gleich danach noch antippen und verbessern.</p>
+    <div class="row">
+      <button class="btn light" id="btn-retake">🔁 Nochmal</button>
+      <button class="btn green" id="btn-accept">✅ Passt, weiter</button>
+    </div>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn light" id="btn-scan-back">⬅ Zurück</button>
+    <button class="btn light" id="btn-scan-manual">✏️ Lieber eintippen</button>
+  </div>
+</section>
+
+<!-- ===== EINGABE / KORRIGIEREN ===== -->
+<section id="s-edit" class="screen">
+  <h2>Stimmen alle Farben?</h2>
+  <p class="small">1. Farbe unten antippen&nbsp; 2. Feld im Würfel-Plan antippen. Die dicken Felder sind die Mitten – die geben jeder Seite ihren Namen.</p>
+  <div class="net" id="net"></div>
+  <p class="small" style="text-align:center;margin-top:0">Mittlere Reihe: Links · <b>Vorne</b> · Rechts · Hinten</p>
+  <div class="card">
+    <div class="palette" id="palette"></div>
+    <div class="counts"></div>
+  </div>
+  <div id="edit-msg"></div>
+  <div class="stack">
+    <button class="btn big green" id="btn-check">🔍 Prüfen und lösen</button>
+    <details class="card">
+      <summary>Eine Seite ist falsch herum? Hier drehen</summary>
+      <div class="row" id="rot-buttons" style="margin-top:8px"></div>
+    </details>
+    <div class="row">
+      <button class="btn light" id="btn-example">🎲 Beispiel</button>
+      <button class="btn light" id="btn-clear">🧹 Leeren</button>
+      <button class="btn light" id="btn-home">🏠 Start</button>
+    </div>
+    <p class="small" id="scramble-info"></p>
+  </div>
+</section>
+
+<!-- ===== LÖSEN ===== -->
+<section id="s-solve" class="screen">
+  <div class="card holdhint" id="hold-hint"></div>
+  <div class="card movecard">
+    <div class="bigarrow" id="bigarrow"></div>
+    <div>
+      <div class="stepinfo" id="stepinfo"></div>
+      <div class="movetext" id="movetext"></div>
+    </div>
+  </div>
+  <div class="stage" id="stage"></div>
+  <div class="bar" style="margin-top:10px"><div id="bar"></div></div>
+  <div class="row" style="margin-top:12px">
+    <button class="btn big light" id="btn-prev">◀ Zurück</button>
+    <button class="btn big green" id="btn-next">Weiter ▶</button>
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button class="btn light" id="btn-play">▶ Alles abspielen</button>
+    <button class="btn light" id="btn-restart">⟲ Von vorn</button>
+    <button class="btn light" id="btn-edit">✏️ Würfel ändern</button>
+  </div>
+  <p class="small">Tipp: Du kannst den 3D-Würfel mit dem Finger drehen, um ihn von allen Seiten anzuschauen.</p>
+  <div class="chips" id="chips"></div>
+  <div class="card" id="testcard" style="display:none"><h2>Selbsttest</h2><div id="testlog"></div></div>
+</section>
+
+</main>
+
+<div class="modal" id="modal"><div class="card">
+  <p id="modal-text" style="font-weight:700"></p>
+  <div class="row" style="margin-top:12px">
+    <button class="btn light" id="modal-no">Nein</button>
+    <button class="btn" id="modal-yes">Ja</button>
+  </div>
+</div></div>
+
+<!-- Zwei-Phasen-Löser "cubejs" (Kociemba-Algorithmus), MIT-Lizenz:
+     Copyright (c) 2013-2017 Petri Lehtinen, (c) 2018 Ludovic Fernandez – https://github.com/ldez/cubejs
+     Wird als Text eingebettet und in einem Hintergrund-Worker ausgeführt. -->
+<script type="text/plain" id="cubejs-src">
+(function() {
+  // Centers
+  var B, BL, BR, Cube, D, DB, DBL, DF, DFR, DL, DLF, DR, DRB, F, FL, FR, L, R, U, UB, UBR, UF, UFL, UL, ULB, UR, URF, centerColor, centerFacelet, cornerColor, cornerFacelet, edgeColor, edgeFacelet;
+
+  [U, R, F, D, L, B] = [0, 1, 2, 3, 4, 5];
+
+  // Corners
+  [URF, UFL, ULB, UBR, DFR, DLF, DBL, DRB] = [0, 1, 2, 3, 4, 5, 6, 7];
+
+  // Edges
+  [UR, UF, UL, UB, DR, DF, DL, DB, FR, FL, BL, BR] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+  [centerFacelet, cornerFacelet, edgeFacelet] = (function() {
+    var _B, _D, _F, _L, _R, _U;
+    _U = function(x) {
+      return x - 1;
+    };
+    _R = function(x) {
+      return _U(9) + x;
+    };
+    _F = function(x) {
+      return _R(9) + x;
+    };
+    _D = function(x) {
+      return _F(9) + x;
+    };
+    _L = function(x) {
+      return _D(9) + x;
+    };
+    _B = function(x) {
+      return _L(9) + x;
+    };
+    return [
+      // Centers
+      [4,
+      13,
+      22,
+      31,
+      40,
+      49],
+      // Corners
+      [[_U(9),
+      _R(1),
+      _F(3)],
+      [_U(7),
+      _F(1),
+      _L(3)],
+      [_U(1),
+      _L(1),
+      _B(3)],
+      [_U(3),
+      _B(1),
+      _R(3)],
+      [_D(3),
+      _F(9),
+      _R(7)],
+      [_D(1),
+      _L(9),
+      _F(7)],
+      [_D(7),
+      _B(9),
+      _L(7)],
+      [_D(9),
+      _R(9),
+      _B(7)]],
+      // Edges
+      [[_U(6),
+      _R(2)],
+      [_U(8),
+      _F(2)],
+      [_U(4),
+      _L(2)],
+      [_U(2),
+      _B(2)],
+      [_D(6),
+      _R(8)],
+      [_D(2),
+      _F(8)],
+      [_D(4),
+      _L(8)],
+      [_D(8),
+      _B(8)],
+      [_F(6),
+      _R(4)],
+      [_F(4),
+      _L(6)],
+      [_B(6),
+      _L(4)],
+      [_B(4),
+      _R(6)]]
+    ];
+  })();
+
+  centerColor = ['U', 'R', 'F', 'D', 'L', 'B'];
+
+  cornerColor = [['U', 'R', 'F'], ['U', 'F', 'L'], ['U', 'L', 'B'], ['U', 'B', 'R'], ['D', 'F', 'R'], ['D', 'L', 'F'], ['D', 'B', 'L'], ['D', 'R', 'B']];
+
+  edgeColor = [['U', 'R'], ['U', 'F'], ['U', 'L'], ['U', 'B'], ['D', 'R'], ['D', 'F'], ['D', 'L'], ['D', 'B'], ['F', 'R'], ['F', 'L'], ['B', 'L'], ['B', 'R']];
+
+  Cube = (function() {
+    var faceNames, faceNums, parseAlg;
+
+    class Cube {
+      constructor(other) {
+        var x;
+        if (other != null) {
+          this.init(other);
+        } else {
+          this.identity();
+        }
+        // For moves to avoid allocating new objects each time
+        this.newCenter = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 5; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newCp = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 7; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newEp = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 11; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newCo = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 7; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newEo = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 11; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+      }
+
+      init(state) {
+        this.center = state.center.slice(0);
+        this.co = state.co.slice(0);
+        this.ep = state.ep.slice(0);
+        this.cp = state.cp.slice(0);
+        return this.eo = state.eo.slice(0);
+      }
+
+      identity() {
+        var x;
+        // Initialize to the identity cube
+        this.center = [0, 1, 2, 3, 4, 5];
+        this.cp = [0, 1, 2, 3, 4, 5, 6, 7];
+        this.co = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 7; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.ep = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        return this.eo = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 11; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+      }
+
+      toJSON() {
+        return {
+          center: this.center,
+          cp: this.cp,
+          co: this.co,
+          ep: this.ep,
+          eo: this.eo
+        };
+      }
+
+      asString() {
+        var corner, edge, i, k, l, m, n, o, ori, p, result;
+        result = [];
+        for (i = k = 0; k <= 5; i = ++k) {
+          result[9 * i + 4] = centerColor[this.center[i]];
+        }
+        for (i = l = 0; l <= 7; i = ++l) {
+          corner = this.cp[i];
+          ori = this.co[i];
+          for (n = m = 0; m <= 2; n = ++m) {
+            result[cornerFacelet[i][(n + ori) % 3]] = cornerColor[corner][n];
+          }
+        }
+        for (i = o = 0; o <= 11; i = ++o) {
+          edge = this.ep[i];
+          ori = this.eo[i];
+          for (n = p = 0; p <= 1; n = ++p) {
+            result[edgeFacelet[i][(n + ori) % 2]] = edgeColor[edge][n];
+          }
+        }
+        return result.join('');
+      }
+
+      static fromString(str) {
+        var col1, col2, cube, i, j, k, l, m, o, ori, p, q, r, ref;
+        cube = new Cube;
+        for (i = k = 0; k <= 5; i = ++k) {
+          for (j = l = 0; l <= 5; j = ++l) {
+            if (str[9 * i + 4] === centerColor[j]) {
+              cube.center[i] = j;
+            }
+          }
+        }
+        for (i = m = 0; m <= 7; i = ++m) {
+          for (ori = o = 0; o <= 2; ori = ++o) {
+            if ((ref = str[cornerFacelet[i][ori]]) === 'U' || ref === 'D') {
+              break;
+            }
+          }
+          col1 = str[cornerFacelet[i][(ori + 1) % 3]];
+          col2 = str[cornerFacelet[i][(ori + 2) % 3]];
+          for (j = p = 0; p <= 7; j = ++p) {
+            if (col1 === cornerColor[j][1] && col2 === cornerColor[j][2]) {
+              cube.cp[i] = j;
+              cube.co[i] = ori % 3;
+            }
+          }
+        }
+        for (i = q = 0; q <= 11; i = ++q) {
+          for (j = r = 0; r <= 11; j = ++r) {
+            if (str[edgeFacelet[i][0]] === edgeColor[j][0] && str[edgeFacelet[i][1]] === edgeColor[j][1]) {
+              cube.ep[i] = j;
+              cube.eo[i] = 0;
+              break;
+            }
+            if (str[edgeFacelet[i][0]] === edgeColor[j][1] && str[edgeFacelet[i][1]] === edgeColor[j][0]) {
+              cube.ep[i] = j;
+              cube.eo[i] = 1;
+              break;
+            }
+          }
+        }
+        return cube;
+      }
+
+      clone() {
+        return new Cube(this.toJSON());
+      }
+
+      // A class method returning a new random cube
+      static random() {
+        return new Cube().randomize();
+      }
+
+      isSolved() {
+        var c, cent, clone, e, k, l, m;
+        clone = this.clone();
+        clone.move(clone.upright());
+        for (cent = k = 0; k <= 5; cent = ++k) {
+          if (clone.center[cent] !== cent) {
+            return false;
+          }
+        }
+        for (c = l = 0; l <= 7; c = ++l) {
+          if (clone.cp[c] !== c) {
+            return false;
+          }
+          if (clone.co[c] !== 0) {
+            return false;
+          }
+        }
+        for (e = m = 0; m <= 11; e = ++m) {
+          if (clone.ep[e] !== e) {
+            return false;
+          }
+          if (clone.eo[e] !== 0) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // Multiply this Cube with another Cube, restricted to centers.
+      centerMultiply(other) {
+        var from, k, to;
+        for (to = k = 0; k <= 5; to = ++k) {
+          from = other.center[to];
+          this.newCenter[to] = this.center[from];
+        }
+        [this.center, this.newCenter] = [this.newCenter, this.center];
+        return this;
+      }
+
+      // Multiply this Cube with another Cube, restricted to corners.
+      cornerMultiply(other) {
+        var from, k, to;
+        for (to = k = 0; k <= 7; to = ++k) {
+          from = other.cp[to];
+          this.newCp[to] = this.cp[from];
+          this.newCo[to] = (this.co[from] + other.co[to]) % 3;
+        }
+        [this.cp, this.newCp] = [this.newCp, this.cp];
+        [this.co, this.newCo] = [this.newCo, this.co];
+        return this;
+      }
+
+      // Multiply this Cube with another Cube, restricted to edges
+      edgeMultiply(other) {
+        var from, k, to;
+        for (to = k = 0; k <= 11; to = ++k) {
+          from = other.ep[to];
+          this.newEp[to] = this.ep[from];
+          this.newEo[to] = (this.eo[from] + other.eo[to]) % 2;
+        }
+        [this.ep, this.newEp] = [this.newEp, this.ep];
+        [this.eo, this.newEo] = [this.newEo, this.eo];
+        return this;
+      }
+
+      // Multiply this cube with another Cube
+      multiply(other) {
+        this.centerMultiply(other);
+        this.cornerMultiply(other);
+        this.edgeMultiply(other);
+        return this;
+      }
+
+      move(arg) {
+        var face, k, l, len, move, power, ref, ref1, x;
+        ref = parseAlg(arg);
+        for (k = 0, len = ref.length; k < len; k++) {
+          move = ref[k];
+          face = move / 3 | 0;
+          power = move % 3;
+          for (x = l = 0, ref1 = power; (0 <= ref1 ? l <= ref1 : l >= ref1); x = 0 <= ref1 ? ++l : --l) {
+            this.multiply(Cube.moves[face]);
+          }
+        }
+        return this;
+      }
+
+      upright() {
+        var clone, i, j, k, l, result;
+        clone = this.clone();
+        result = [];
+        for (i = k = 0; k <= 5; i = ++k) {
+          if (clone.center[i] === F) {
+            break;
+          }
+        }
+        switch (i) {
+          case D:
+            result.push("x");
+            break;
+          case U:
+            result.push("x'");
+            break;
+          case B:
+            result.push("x2");
+            break;
+          case R:
+            result.push("y");
+            break;
+          case L:
+            result.push("y'");
+        }
+        if (result.length) {
+          clone.move(result[0]);
+        }
+        for (j = l = 0; l <= 5; j = ++l) {
+          if (clone.center[j] === U) {
+            break;
+          }
+        }
+        switch (j) {
+          case L:
+            result.push("z");
+            break;
+          case R:
+            result.push("z'");
+            break;
+          case D:
+            result.push("z2");
+        }
+        return result.join(' ');
+      }
+
+      static inverse(arg) {
+        var face, k, len, move, power, result, str;
+        result = (function() {
+          var k, len, ref, results;
+          ref = parseAlg(arg);
+          results = [];
+          for (k = 0, len = ref.length; k < len; k++) {
+            move = ref[k];
+            face = move / 3 | 0;
+            power = move % 3;
+            results.push(face * 3 + -(power - 1) + 1);
+          }
+          return results;
+        })();
+        result.reverse();
+        if (typeof arg === 'string') {
+          str = '';
+          for (k = 0, len = result.length; k < len; k++) {
+            move = result[k];
+            face = move / 3 | 0;
+            power = move % 3;
+            str += faceNames[face];
+            if (power === 1) {
+              str += '2';
+            } else if (power === 2) {
+              str += "'";
+            }
+            str += ' ';
+          }
+          return str.substring(0, str.length - 1);
+        } else if (arg.length != null) {
+          return result;
+        } else {
+          return result[0];
+        }
+      }
+
+    };
+
+    Cube.prototype.randomize = (function() {
+      var arePermutationsValid, generateValidRandomOrientation, generateValidRandomPermutation, getNumSwaps, isOrientationValid, randint, randomizeOrientation, result, shuffle;
+      randint = function(min, max) {
+        return min + Math.floor(Math.random() * (max - min + 1));
+      };
+      // Fisher-Yates shuffle adapted from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+      shuffle = function(array) {
+        var currentIndex, randomIndex, temporaryValue;
+        currentIndex = array.length;
+        // While there remain elements to shuffle...
+        while (currentIndex !== 0) {
+          // Pick a remaining element...
+          randomIndex = randint(0, currentIndex - 1);
+          currentIndex -= 1;
+          // And swap it with the current element.
+          temporaryValue = array[currentIndex];
+          [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+        }
+      };
+      getNumSwaps = function(arr) {
+        var cur, cycleLength, i, k, numSwaps, ref, seen, x;
+        numSwaps = 0;
+        seen = (function() {
+          var k, ref, results;
+          results = [];
+          for (x = k = 0, ref = arr.length - 1; (0 <= ref ? k <= ref : k >= ref); x = 0 <= ref ? ++k : --k) {
+            results.push(false);
+          }
+          return results;
+        })();
+        while (true) {
+          // We compute the cycle decomposition
+          cur = -1;
+          for (i = k = 0, ref = arr.length - 1; (0 <= ref ? k <= ref : k >= ref); i = 0 <= ref ? ++k : --k) {
+            if (!seen[i]) {
+              cur = i;
+              break;
+            }
+          }
+          if (cur === -1) {
+            break;
+          }
+          cycleLength = 0;
+          while (!seen[cur]) {
+            seen[cur] = true;
+            cycleLength++;
+            cur = arr[cur];
+          }
+          // A cycle is equivalent to cycleLength + 1 swaps
+          numSwaps += cycleLength + 1;
+        }
+        return numSwaps;
+      };
+      arePermutationsValid = function(cp, ep) {
+        var numSwaps;
+        numSwaps = getNumSwaps(ep) + getNumSwaps(cp);
+        return numSwaps % 2 === 0;
+      };
+      generateValidRandomPermutation = function(cp, ep) {
+        // Each shuffle only takes around 12 operations and there's a 50%
+        // chance of a valid permutation so it'll finish in very good time
+        shuffle(ep);
+        shuffle(cp);
+        while (!arePermutationsValid(cp, ep)) {
+          shuffle(ep);
+          shuffle(cp);
+        }
+      };
+      randomizeOrientation = function(arr, numOrientations) {
+        var i, k, ori, ref;
+        ori = 0;
+        for (i = k = 0, ref = arr.length - 1; (0 <= ref ? k <= ref : k >= ref); i = 0 <= ref ? ++k : --k) {
+          ori += (arr[i] = randint(0, numOrientations - 1));
+        }
+      };
+      isOrientationValid = function(arr, numOrientations) {
+        return arr.reduce(function(a, b) {
+          return a + b;
+        }) % numOrientations === 0;
+      };
+      generateValidRandomOrientation = function(co, eo) {
+        // There is a 1/2 and 1/3 probably respectively of each of these
+        // succeeding so the probability of them running 10 times before
+        // success is already only 1% and only gets exponentially lower
+        // and each generation is only in the 10s of operations which is nothing
+        randomizeOrientation(co, 3);
+        while (!isOrientationValid(co, 3)) {
+          randomizeOrientation(co, 3);
+        }
+        randomizeOrientation(eo, 2);
+        while (!isOrientationValid(eo, 2)) {
+          randomizeOrientation(eo, 2);
+        }
+      };
+      result = function() {
+        generateValidRandomPermutation(this.cp, this.ep);
+        generateValidRandomOrientation(this.co, this.eo);
+        return this;
+      };
+      return result;
+    })();
+
+    Cube.moves = [
+      {
+        // U
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [UBR,
+      URF,
+      UFL,
+      ULB,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UB,
+      UR,
+      UF,
+      UL,
+      DR,
+      DF,
+      DL,
+      DB,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // R
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [DFR,
+      UFL,
+      ULB,
+      URF,
+      DRB,
+      DLF,
+      DBL,
+      UBR],
+        co: [2,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      2],
+        ep: [FR,
+      UF,
+      UL,
+      UB,
+      BR,
+      DF,
+      DL,
+      DB,
+      DR,
+      FL,
+      BL,
+      UR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // F
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [UFL,
+      DLF,
+      ULB,
+      UBR,
+      URF,
+      DFR,
+      DBL,
+      DRB],
+        co: [1,
+      2,
+      0,
+      0,
+      2,
+      1,
+      0,
+      0],
+        ep: [UR,
+      FL,
+      UL,
+      UB,
+      DR,
+      FR,
+      DL,
+      DB,
+      UF,
+      DF,
+      BL,
+      BR],
+        eo: [0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0]
+      },
+      {
+        // D
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DLF,
+      DBL,
+      DRB,
+      DFR],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UR,
+      UF,
+      UL,
+      UB,
+      DF,
+      DL,
+      DB,
+      DR,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // L
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [URF,
+      ULB,
+      DBL,
+      UBR,
+      DFR,
+      UFL,
+      DLF,
+      DRB],
+        co: [0,
+      1,
+      2,
+      0,
+      0,
+      2,
+      1,
+      0],
+        ep: [UR,
+      UF,
+      BL,
+      UB,
+      DR,
+      DF,
+      FL,
+      DB,
+      FR,
+      UL,
+      DL,
+      BR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // B
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [URF,
+      UFL,
+      UBR,
+      DRB,
+      DFR,
+      DLF,
+      ULB,
+      DBL],
+        co: [0,
+      0,
+      1,
+      2,
+      0,
+      0,
+      2,
+      1],
+        ep: [UR,
+      UF,
+      UL,
+      BR,
+      DR,
+      DF,
+      DL,
+      BL,
+      FR,
+      FL,
+      UB,
+      DB],
+        eo: [0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1]
+      },
+      {
+        // E
+        center: [U,
+      F,
+      L,
+      D,
+      B,
+      R],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UR,
+      UF,
+      UL,
+      UB,
+      DR,
+      DF,
+      DL,
+      DB,
+      FL,
+      BL,
+      BR,
+      FR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1]
+      },
+      {
+        // M
+        center: [B,
+      R,
+      U,
+      F,
+      L,
+      D],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UR,
+      UB,
+      UL,
+      DB,
+      DR,
+      UF,
+      DL,
+      DF,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // S
+        center: [L,
+      U,
+      F,
+      R,
+      D,
+      B],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UL,
+      UF,
+      DL,
+      UB,
+      UR,
+      DF,
+      DR,
+      DB,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0]
+      }
+    ];
+
+    faceNums = {
+      U: 0,
+      R: 1,
+      F: 2,
+      D: 3,
+      L: 4,
+      B: 5,
+      E: 6,
+      M: 7,
+      S: 8,
+      x: 9,
+      y: 10,
+      z: 11,
+      u: 12,
+      r: 13,
+      f: 14,
+      d: 15,
+      l: 16,
+      b: 17
+    };
+
+    faceNames = {
+      0: 'U',
+      1: 'R',
+      2: 'F',
+      3: 'D',
+      4: 'L',
+      5: 'B',
+      6: 'E',
+      7: 'M',
+      8: 'S',
+      9: 'x',
+      10: 'y',
+      11: 'z',
+      12: 'u',
+      13: 'r',
+      14: 'f',
+      15: 'd',
+      16: 'l',
+      17: 'b'
+    };
+
+    parseAlg = function(arg) {
+      var k, len, move, part, power, ref, results;
+      if (typeof arg === 'string') {
+        ref = arg.split(/\s+/);
+        // String
+        results = [];
+        for (k = 0, len = ref.length; k < len; k++) {
+          part = ref[k];
+          if (part.length === 0) {
+            // First and last can be empty
+            continue;
+          }
+          if (part.length > 2) {
+            throw new Error(`Invalid move: ${part}`);
+          }
+          move = faceNums[part[0]];
+          if (move === void 0) {
+            throw new Error(`Invalid move: ${part}`);
+          }
+          if (part.length === 1) {
+            power = 0;
+          } else {
+            if (part[1] === '2') {
+              power = 1;
+            } else if (part[1] === "'") {
+              power = 2;
+            } else {
+              throw new Error(`Invalid move: ${part}`);
+            }
+          }
+          results.push(move * 3 + power);
+        }
+        return results;
+      } else if (arg.length != null) {
+        // Already an array
+        return arg;
+      } else {
+        // A single move
+        return [arg];
+      }
+    };
+
+    // x
+    Cube.moves.push(new Cube().move("R M' L'").toJSON());
+
+    // y
+    Cube.moves.push(new Cube().move("U E' D'").toJSON());
+
+    // z
+    Cube.moves.push(new Cube().move("F S B'").toJSON());
+
+    // u
+    Cube.moves.push(new Cube().move("U E'").toJSON());
+
+    // r
+    Cube.moves.push(new Cube().move("R M'").toJSON());
+
+    // f
+    Cube.moves.push(new Cube().move("F S").toJSON());
+
+    // d
+    Cube.moves.push(new Cube().move("D E").toJSON());
+
+    // l
+    Cube.moves.push(new Cube().move("L M").toJSON());
+
+    // b
+    Cube.moves.push(new Cube().move("B S'").toJSON());
+
+    return Cube;
+
+  }).call(this);
+
+  //# Globals
+  if (typeof module !== "undefined" && module !== null) {
+    module.exports = Cube;
+  } else {
+    this.Cube = Cube;
+  }
+
+}).call(this);
+
+(function() {
+  var B, BL, BR, Cnk, Cube, D, DB, DBL, DF, DFR, DL, DLF, DR, DRB, F, FL, FR, Include, L, N_FLIP, N_FRtoBR, N_PARITY, N_SLICE1, N_SLICE2, N_TWIST, N_UBtoDF, N_URFtoDLF, N_URtoDF, N_URtoUL, R, U, UB, UBR, UF, UFL, UL, ULB, UR, URF, allMoves1, allMoves2, computeMoveTable, computePruningTable, faceNames, faceNums, factorial, key, max, mergeURtoDF, moveTableParams, nextMoves1, nextMoves2, permutationIndex, pruning, pruningTableParams, rotateLeft, rotateRight, value,
+    indexOf = [].indexOf;
+
+  Cube = this.Cube || require('./cube');
+
+  // Centers
+  [U, R, F, D, L, B] = [0, 1, 2, 3, 4, 5];
+
+  // Corners
+  [URF, UFL, ULB, UBR, DFR, DLF, DBL, DRB] = [0, 1, 2, 3, 4, 5, 6, 7];
+
+  // Edges
+  [UR, UF, UL, UB, DR, DF, DL, DB, FR, FL, BL, BR] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+  //# Helpers
+
+  // n choose k, i.e. the binomial coeffiecient
+  Cnk = function(n, k) {
+    var i, j, s;
+    if (n < k) {
+      return 0;
+    }
+    if (k > n / 2) {
+      k = n - k;
+    }
+    s = 1;
+    i = n;
+    j = 1;
+    while (i !== n - k) {
+      s *= i;
+      s /= j;
+      i--;
+      j++;
+    }
+    return s;
+  };
+
+  // n!
+  factorial = function(n) {
+    var f, i, m, ref;
+    f = 1;
+    for (i = m = 2, ref = n; (2 <= ref ? m <= ref : m >= ref); i = 2 <= ref ? ++m : --m) {
+      f *= i;
+    }
+    return f;
+  };
+
+  // Maximum of two values
+  max = function(a, b) {
+    if (a > b) {
+      return a;
+    } else {
+      return b;
+    }
+  };
+
+  // Rotate elements between l and r left by one place
+  rotateLeft = function(array, l, r) {
+    var i, m, ref, ref1, tmp;
+    tmp = array[l];
+    for (i = m = ref = l, ref1 = r - 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+      array[i] = array[i + 1];
+    }
+    return array[r] = tmp;
+  };
+
+  // Rotate elements between l and r right by one place
+  rotateRight = function(array, l, r) {
+    var i, m, ref, ref1, tmp;
+    tmp = array[r];
+    for (i = m = ref = r, ref1 = l + 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+      array[i] = array[i - 1];
+    }
+    return array[l] = tmp;
+  };
+
+  // Generate a function that computes permutation indices.
+
+  // The permutation index actually encodes two indices: Combination,
+  // i.e. positions of the cubies start..end (A) and their respective
+  // permutation (B). The maximum value for B is
+
+  //   maxB = (end - start + 1)!
+
+  // and the index is A * maxB + B
+  permutationIndex = function(context, start, end, fromEnd = false) {
+    var i, maxAll, maxB, maxOur, our, permName;
+    maxOur = end - start;
+    maxB = factorial(maxOur + 1);
+    if (context === 'corners') {
+      maxAll = 7;
+      permName = 'cp';
+    } else {
+      maxAll = 11;
+      permName = 'ep';
+    }
+    our = (function() {
+      var m, ref, results;
+      results = [];
+      for (i = m = 0, ref = maxOur; (0 <= ref ? m <= ref : m >= ref); i = 0 <= ref ? ++m : --m) {
+        results.push(0);
+      }
+      return results;
+    })();
+    return function(index) {
+      var a, b, c, j, k, m, o, p, perm, q, ref, ref1, ref10, ref2, ref3, ref4, ref5, ref6, ref7, ref8, ref9, t, u, w, x, y, z;
+      if (index != null) {
+        for (i = m = 0, ref = maxOur; (0 <= ref ? m <= ref : m >= ref); i = 0 <= ref ? ++m : --m) {
+          // Reset our to [start..end]
+          our[i] = i + start;
+        }
+        b = index % maxB; // permutation
+        a = index / maxB | 0; // combination
+        
+        // Invalidate all edges
+        perm = this[permName];
+        for (i = o = 0, ref1 = maxAll; (0 <= ref1 ? o <= ref1 : o >= ref1); i = 0 <= ref1 ? ++o : --o) {
+          perm[i] = -1;
+        }
+// Generate permutation from index b
+        for (j = p = 1, ref2 = maxOur; (1 <= ref2 ? p <= ref2 : p >= ref2); j = 1 <= ref2 ? ++p : --p) {
+          k = b % (j + 1);
+          b = b / (j + 1) | 0;
+          // TODO: Implement rotateRightBy(our, 0, j, k)
+          while (k > 0) {
+            rotateRight(our, 0, j);
+            k--;
+          }
+        }
+        // Generate combination and set our edges
+        x = maxOur;
+        if (fromEnd) {
+          for (j = q = 0, ref3 = maxAll; (0 <= ref3 ? q <= ref3 : q >= ref3); j = 0 <= ref3 ? ++q : --q) {
+            c = Cnk(maxAll - j, x + 1);
+            if (a - c >= 0) {
+              perm[j] = our[maxOur - x];
+              a -= c;
+              x--;
+            }
+          }
+        } else {
+          for (j = t = ref4 = maxAll; (ref4 <= 0 ? t <= 0 : t >= 0); j = ref4 <= 0 ? ++t : --t) {
+            c = Cnk(j, x + 1);
+            if (a - c >= 0) {
+              perm[j] = our[x];
+              a -= c;
+              x--;
+            }
+          }
+        }
+        return this;
+      } else {
+        perm = this[permName];
+        for (i = u = 0, ref5 = maxOur; (0 <= ref5 ? u <= ref5 : u >= ref5); i = 0 <= ref5 ? ++u : --u) {
+          our[i] = -1;
+        }
+        a = b = x = 0;
+        // Compute the index a < ((maxAll + 1) choose (maxOur + 1)) and
+        // the permutation
+        if (fromEnd) {
+          for (j = w = ref6 = maxAll; (ref6 <= 0 ? w <= 0 : w >= 0); j = ref6 <= 0 ? ++w : --w) {
+            if ((start <= (ref7 = perm[j]) && ref7 <= end)) {
+              a += Cnk(maxAll - j, x + 1);
+              our[maxOur - x] = perm[j];
+              x++;
+            }
+          }
+        } else {
+          for (j = y = 0, ref8 = maxAll; (0 <= ref8 ? y <= ref8 : y >= ref8); j = 0 <= ref8 ? ++y : --y) {
+            if ((start <= (ref9 = perm[j]) && ref9 <= end)) {
+              a += Cnk(j, x + 1);
+              our[x] = perm[j];
+              x++;
+            }
+          }
+        }
+// Compute the index b < (maxOur + 1)! for the permutation
+        for (j = z = ref10 = maxOur; (ref10 <= 0 ? z <= 0 : z >= 0); j = ref10 <= 0 ? ++z : --z) {
+          k = 0;
+          while (our[j] !== start + j) {
+            rotateLeft(our, 0, j);
+            k++;
+          }
+          b = (j + 1) * b + k;
+        }
+        return a * maxB + b;
+      }
+    };
+  };
+
+  Include = {
+    // The twist of the 8 corners, 0 <= twist < 3^7. The orientation of
+    // the DRB corner is fully determined by the orientation of the other
+    // corners.
+    twist: function(twist) {
+      var i, m, o, ori, parity, v;
+      if (twist != null) {
+        parity = 0;
+        for (i = m = 6; m >= 0; i = --m) {
+          ori = twist % 3;
+          twist = (twist / 3) | 0;
+          this.co[i] = ori;
+          parity += ori;
+        }
+        this.co[7] = (3 - parity % 3) % 3;
+        return this;
+      } else {
+        v = 0;
+        for (i = o = 0; o <= 6; i = ++o) {
+          v = 3 * v + this.co[i];
+        }
+        return v;
+      }
+    },
+    // The flip of the 12 edges, 0 <= flip < 2^11. The orientation of the
+    // BR edge is fully determined by the orientation of the other edges.
+    flip: function(flip) {
+      var i, m, o, ori, parity, v;
+      if (flip != null) {
+        parity = 0;
+        for (i = m = 10; m >= 0; i = --m) {
+          ori = flip % 2;
+          flip = flip / 2 | 0;
+          this.eo[i] = ori;
+          parity += ori;
+        }
+        this.eo[11] = (2 - parity % 2) % 2;
+        return this;
+      } else {
+        v = 0;
+        for (i = o = 0; o <= 10; i = ++o) {
+          v = 2 * v + this.eo[i];
+        }
+        return v;
+      }
+    },
+    // Parity of the corner permutation
+    cornerParity: function() {
+      var i, j, m, o, ref, ref1, ref2, ref3, s;
+      s = 0;
+      for (i = m = ref = DRB, ref1 = URF + 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+        for (j = o = ref2 = i - 1, ref3 = URF; (ref2 <= ref3 ? o <= ref3 : o >= ref3); j = ref2 <= ref3 ? ++o : --o) {
+          if (this.cp[j] > this.cp[i]) {
+            s++;
+          }
+        }
+      }
+      return s % 2;
+    },
+    // Parity of the edges permutation. Parity of corners and edges are
+    // the same if the cube is solvable.
+    edgeParity: function() {
+      var i, j, m, o, ref, ref1, ref2, ref3, s;
+      s = 0;
+      for (i = m = ref = BR, ref1 = UR + 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+        for (j = o = ref2 = i - 1, ref3 = UR; (ref2 <= ref3 ? o <= ref3 : o >= ref3); j = ref2 <= ref3 ? ++o : --o) {
+          if (this.ep[j] > this.ep[i]) {
+            s++;
+          }
+        }
+      }
+      return s % 2;
+    },
+    // Permutation of the six corners URF, UFL, ULB, UBR, DFR, DLF
+    URFtoDLF: permutationIndex('corners', URF, DLF),
+    // Permutation of the three edges UR, UF, UL
+    URtoUL: permutationIndex('edges', UR, UL),
+    // Permutation of the three edges UB, DR, DF
+    UBtoDF: permutationIndex('edges', UB, DF),
+    // Permutation of the six edges UR, UF, UL, UB, DR, DF
+    URtoDF: permutationIndex('edges', UR, DF),
+    // Permutation of the equator slice edges FR, FL, BL and BR
+    FRtoBR: permutationIndex('edges', FR, BR, true)
+  };
+
+  for (key in Include) {
+    value = Include[key];
+    Cube.prototype[key] = value;
+  }
+
+  computeMoveTable = function(context, coord, size) {
+    var apply, cube, i, inner, j, k, m, move, o, p, ref, results;
+    // Loop through all valid values for the coordinate, setting cube's
+    // state in each iteration. Then apply each of the 18 moves to the
+    // cube, and compute the resulting coordinate.
+    apply = context === 'corners' ? 'cornerMultiply' : 'edgeMultiply';
+    cube = new Cube;
+    results = [];
+    for (i = m = 0, ref = size - 1; (0 <= ref ? m <= ref : m >= ref); i = 0 <= ref ? ++m : --m) {
+      cube[coord](i);
+      inner = [];
+      for (j = o = 0; o <= 5; j = ++o) {
+        move = Cube.moves[j];
+        for (k = p = 0; p <= 2; k = ++p) {
+          cube[apply](move);
+          inner.push(cube[coord]());
+        }
+        // 4th face turn restores the cube
+        cube[apply](move);
+      }
+      results.push(inner);
+    }
+    return results;
+  };
+
+  // Because we only have the phase 2 URtoDF coordinates, we need to
+  // merge the URtoUL and UBtoDF coordinates to URtoDF in the beginning
+  // of phase 2.
+  mergeURtoDF = (function() {
+    var a, b;
+    a = new Cube;
+    b = new Cube;
+    return function(URtoUL, UBtoDF) {
+      var i, m;
+      // Collisions can be found because unset are set to -1
+      a.URtoUL(URtoUL);
+      b.UBtoDF(UBtoDF);
+      for (i = m = 0; m <= 7; i = ++m) {
+        if (a.ep[i] !== -1) {
+          if (b.ep[i] !== -1) {
+            return -1; // collision
+          } else {
+            b.ep[i] = a.ep[i];
+          }
+        }
+      }
+      return b.URtoDF();
+    };
+  })();
+
+  N_TWIST = 2187; // 3^7 corner orientations
+
+  N_FLIP = 2048; // 2^11 possible edge flips
+
+  N_PARITY = 2; // 2 possible parities
+
+  N_FRtoBR = 11880; // 12!/(12-4)! permutations of FR..BR edges
+
+  N_SLICE1 = 495; // (12 choose 4) possible positions of FR..BR edges
+
+  N_SLICE2 = 24; // 4! permutations of FR..BR edges in phase 2
+
+  N_URFtoDLF = 20160; // 8!/(8-6)! permutations of URF..DLF corners
+
+  
+  // The URtoDF move table is only computed for phase 2 because the full
+  // table would have >650000 entries
+  N_URtoDF = 20160; // 8!/(8-6)! permutation of UR..DF edges in phase 2
+
+  N_URtoUL = 1320; // 12!/(12-3)! permutations of UR..UL edges
+
+  N_UBtoDF = 1320; // 12!/(12-3)! permutations of UB..DF edges
+
+  
+  // The move table for parity is so small that it's included here
+  Cube.moveTables = {
+    parity: [[1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1], [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]],
+    twist: null,
+    flip: null,
+    FRtoBR: null,
+    URFtoDLF: null,
+    URtoDF: null,
+    URtoUL: null,
+    UBtoDF: null,
+    mergeURtoDF: null
+  };
+
+  // Other move tables are computed on the fly
+  moveTableParams = {
+    // name: [scope, size]
+    twist: ['corners', N_TWIST],
+    flip: ['edges', N_FLIP],
+    FRtoBR: ['edges', N_FRtoBR],
+    URFtoDLF: ['corners', N_URFtoDLF],
+    URtoDF: ['edges', N_URtoDF],
+    URtoUL: ['edges', N_URtoUL],
+    UBtoDF: ['edges', N_UBtoDF],
+    mergeURtoDF: []
+  };
+
+  Cube.computeMoveTables = function(...tables) {
+    var len, m, name, scope, size, tableName;
+    if (tables.length === 0) {
+      tables = (function() {
+        var results;
+        results = [];
+        for (name in moveTableParams) {
+          results.push(name);
+        }
+        return results;
+      })();
+    }
+    for (m = 0, len = tables.length; m < len; m++) {
+      tableName = tables[m];
+      if (this.moveTables[tableName] !== null) {
+        // Already computed
+        continue;
+      }
+      if (tableName === 'mergeURtoDF') {
+        this.moveTables.mergeURtoDF = (function() {
+          var UBtoDF, URtoUL, o, results;
+          results = [];
+          for (URtoUL = o = 0; o <= 335; URtoUL = ++o) {
+            results.push((function() {
+              var p, results1;
+              results1 = [];
+              for (UBtoDF = p = 0; p <= 335; UBtoDF = ++p) {
+                results1.push(mergeURtoDF(URtoUL, UBtoDF));
+              }
+              return results1;
+            })());
+          }
+          return results;
+        })();
+      } else {
+        [scope, size] = moveTableParams[tableName];
+        this.moveTables[tableName] = computeMoveTable(scope, tableName, size);
+      }
+    }
+    return this;
+  };
+
+  // Phase 1: All moves are valid
+  allMoves1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+  // The list of next valid phase 1 moves when the given face was turned
+  // in the last move
+  nextMoves1 = (function() {
+    var face, lastFace, m, next, o, p, power, results;
+    results = [];
+    for (lastFace = m = 0; m <= 5; lastFace = ++m) {
+      next = [];
+// Don't allow commuting moves, e.g. U U'. Also make sure that
+// opposite faces are always moved in the same order, i.e. allow
+// U D but no D U. This avoids sequences like U D U'.
+      for (face = o = 0; o <= 5; face = ++o) {
+        if (face !== lastFace && face !== lastFace - 3) {
+// single, double or inverse move
+          for (power = p = 0; p <= 2; power = ++p) {
+            next.push(face * 3 + power);
+          }
+        }
+      }
+      results.push(next);
+    }
+    return results;
+  })();
+
+  // Phase 2: Double moves of all faces plus quarter moves of U and D
+  allMoves2 = [0, 1, 2, 4, 7, 9, 10, 11, 13, 16];
+
+  nextMoves2 = (function() {
+    var face, lastFace, len, m, next, o, p, power, powers, results;
+    results = [];
+    for (lastFace = m = 0; m <= 5; lastFace = ++m) {
+      next = [];
+      for (face = o = 0; o <= 5; face = ++o) {
+        if (!(face !== lastFace && face !== lastFace - 3)) {
+          continue;
+        }
+        // Allow all moves of U and D and double moves of others
+        powers = face === 0 || face === 3 ? [0, 1, 2] : [1];
+        for (p = 0, len = powers.length; p < len; p++) {
+          power = powers[p];
+          next.push(face * 3 + power);
+        }
+      }
+      results.push(next);
+    }
+    return results;
+  })();
+
+  // 8 values are encoded in one number
+  pruning = function(table, index, value) {
+    var pos, shift, slot;
+    pos = index % 8;
+    slot = index >> 3;
+    shift = pos << 2;
+    if (value != null) {
+      // Set
+      table[slot] &= ~(0xF << shift);
+      table[slot] |= value << shift;
+      return value;
+    } else {
+      // Get
+      return (table[slot] & (0xF << shift)) >>> shift;
+    }
+  };
+
+  computePruningTable = function(phase, size, currentCoords, nextIndex) {
+    var current, depth, done, index, len, m, move, moves, next, o, ref, table, x;
+    // Initialize all values to 0xF
+    table = (function() {
+      var m, ref, results;
+      results = [];
+      for (x = m = 0, ref = Math.ceil(size / 8) - 1; (0 <= ref ? m <= ref : m >= ref); x = 0 <= ref ? ++m : --m) {
+        results.push(0xFFFFFFFF);
+      }
+      return results;
+    })();
+    if (phase === 1) {
+      moves = allMoves1;
+    } else {
+      moves = allMoves2;
+    }
+    depth = 0;
+    pruning(table, 0, depth);
+    done = 1;
+    // In each iteration, take each state found in the previous depth and
+    // compute the next state. Stop when all states have been assigned a
+    // depth.
+    while (done !== size) {
+      for (index = m = 0, ref = size - 1; (0 <= ref ? m <= ref : m >= ref); index = 0 <= ref ? ++m : --m) {
+        if (!(pruning(table, index) === depth)) {
+          continue;
+        }
+        current = currentCoords(index);
+        for (o = 0, len = moves.length; o < len; o++) {
+          move = moves[o];
+          next = nextIndex(current, move);
+          if (pruning(table, next) === 0xF) {
+            pruning(table, next, depth + 1);
+            done++;
+          }
+        }
+      }
+      depth++;
+    }
+    return table;
+  };
+
+  Cube.pruningTables = {
+    sliceTwist: null,
+    sliceFlip: null,
+    sliceURFtoDLFParity: null,
+    sliceURtoDFParity: null
+  };
+
+  pruningTableParams = {
+    // name: [phase, size, currentCoords, nextIndex]
+    sliceTwist: [
+      1,
+      N_SLICE1 * N_TWIST,
+      function(index) {
+        return [index % N_SLICE1,
+      index / N_SLICE1 | 0];
+      },
+      function(current,
+      move) {
+        var newSlice,
+      newTwist,
+      slice,
+      twist;
+        [slice,
+      twist] = current;
+        newSlice = Cube.moveTables.FRtoBR[slice * 24][move] / 24 | 0;
+        newTwist = Cube.moveTables.twist[twist][move];
+        return newTwist * N_SLICE1 + newSlice;
+      }
+    ],
+    sliceFlip: [
+      1,
+      N_SLICE1 * N_FLIP,
+      function(index) {
+        return [index % N_SLICE1,
+      index / N_SLICE1 | 0];
+      },
+      function(current,
+      move) {
+        var flip,
+      newFlip,
+      newSlice,
+      slice;
+        [slice,
+      flip] = current;
+        newSlice = Cube.moveTables.FRtoBR[slice * 24][move] / 24 | 0;
+        newFlip = Cube.moveTables.flip[flip][move];
+        return newFlip * N_SLICE1 + newSlice;
+      }
+    ],
+    sliceURFtoDLFParity: [
+      2,
+      N_SLICE2 * N_URFtoDLF * N_PARITY,
+      function(index) {
+        return [index % 2,
+      (index / 2 | 0) % N_SLICE2,
+      (index / 2 | 0) / N_SLICE2 | 0];
+      },
+      function(current,
+      move) {
+        var URFtoDLF,
+      newParity,
+      newSlice,
+      newURFtoDLF,
+      parity,
+      slice;
+        [parity,
+      slice,
+      URFtoDLF] = current;
+        newParity = Cube.moveTables.parity[parity][move];
+        newSlice = Cube.moveTables.FRtoBR[slice][move];
+        newURFtoDLF = Cube.moveTables.URFtoDLF[URFtoDLF][move];
+        return (newURFtoDLF * N_SLICE2 + newSlice) * 2 + newParity;
+      }
+    ],
+    sliceURtoDFParity: [
+      2,
+      N_SLICE2 * N_URtoDF * N_PARITY,
+      function(index) {
+        return [index % 2,
+      (index / 2 | 0) % N_SLICE2,
+      (index / 2 | 0) / N_SLICE2 | 0];
+      },
+      function(current,
+      move) {
+        var URtoDF,
+      newParity,
+      newSlice,
+      newURtoDF,
+      parity,
+      slice;
+        [parity,
+      slice,
+      URtoDF] = current;
+        newParity = Cube.moveTables.parity[parity][move];
+        newSlice = Cube.moveTables.FRtoBR[slice][move];
+        newURtoDF = Cube.moveTables.URtoDF[URtoDF][move];
+        return (newURtoDF * N_SLICE2 + newSlice) * 2 + newParity;
+      }
+    ]
+  };
+
+  Cube.computePruningTables = function(...tables) {
+    var len, m, name, params, tableName;
+    if (tables.length === 0) {
+      tables = (function() {
+        var results;
+        results = [];
+        for (name in pruningTableParams) {
+          results.push(name);
+        }
+        return results;
+      })();
+    }
+    for (m = 0, len = tables.length; m < len; m++) {
+      tableName = tables[m];
+      if (this.pruningTables[tableName] !== null) {
+        // Already computed
+        continue;
+      }
+      params = pruningTableParams[tableName];
+      this.pruningTables[tableName] = computePruningTable(...params);
+    }
+    return this;
+  };
+
+  Cube.initSolver = function() {
+    Cube.computeMoveTables();
+    return Cube.computePruningTables();
+  };
+
+  Cube.prototype.solveUpright = function(maxDepth = 22) {
+    var State, freeStates, moveNames, phase1, phase1search, phase2, phase2search, solution, state, x;
+    // Names for all moves, i.e. U, U2, U', F, F2, ...
+    moveNames = (function() {
+      var face, faceName, m, o, power, powerName, result;
+      faceName = ['U', 'R', 'F', 'D', 'L', 'B'];
+      powerName = ['', '2', "'"];
+      result = [];
+      for (face = m = 0; m <= 5; face = ++m) {
+        for (power = o = 0; o <= 2; power = ++o) {
+          result.push(faceName[face] + powerName[power]);
+        }
+      }
+      return result;
+    })();
+    State = class State {
+      constructor(cube) {
+        this.parent = null;
+        this.lastMove = null;
+        this.depth = 0;
+        if (cube) {
+          this.init(cube);
+        }
+      }
+
+      init(cube) {
+        // Phase 1 coordinates
+        this.flip = cube.flip();
+        this.twist = cube.twist();
+        this.slice = cube.FRtoBR() / N_SLICE2 | 0;
+        // Phase 2 coordinates
+        this.parity = cube.cornerParity();
+        this.URFtoDLF = cube.URFtoDLF();
+        this.FRtoBR = cube.FRtoBR();
+        // These are later merged to URtoDF when phase 2 begins
+        this.URtoUL = cube.URtoUL();
+        this.UBtoDF = cube.UBtoDF();
+        return this;
+      }
+
+      solution() {
+        if (this.parent) {
+          return this.parent.solution() + moveNames[this.lastMove] + ' ';
+        } else {
+          return '';
+        }
+      }
+
+      //# Helpers
+      move(table, index, move) {
+        return Cube.moveTables[table][index][move];
+      }
+
+      pruning(table, index) {
+        return pruning(Cube.pruningTables[table], index);
+      }
+
+      //# Phase 1
+
+      // Return the next valid phase 1 moves for this state
+      moves1() {
+        if (this.lastMove !== null) {
+          return nextMoves1[this.lastMove / 3 | 0];
+        } else {
+          return allMoves1;
+        }
+      }
+
+      // Compute the minimum number of moves to the end of phase 1
+      minDist1() {
+        var d1, d2;
+        // The maximum number of moves to the end of phase 1 wrt. the
+        // combination flip and slice coordinates only
+        d1 = this.pruning('sliceFlip', N_SLICE1 * this.flip + this.slice);
+        // The combination of twist and slice coordinates
+        d2 = this.pruning('sliceTwist', N_SLICE1 * this.twist + this.slice);
+        // The true minimal distance is the maximum of these two
+        return max(d1, d2);
+      }
+
+      // Compute the next phase 1 state for the given move
+      next1(move) {
+        var next;
+        next = freeStates.pop();
+        next.parent = this;
+        next.lastMove = move;
+        next.depth = this.depth + 1;
+        next.flip = this.move('flip', this.flip, move);
+        next.twist = this.move('twist', this.twist, move);
+        next.slice = this.move('FRtoBR', this.slice * 24, move) / 24 | 0;
+        return next;
+      }
+
+      //# Phase 2
+
+      // Return the next valid phase 2 moves for this state
+      moves2() {
+        if (this.lastMove !== null) {
+          return nextMoves2[this.lastMove / 3 | 0];
+        } else {
+          return allMoves2;
+        }
+      }
+
+      // Compute the minimum number of moves to the solved cube
+      minDist2() {
+        var d1, d2, index1, index2;
+        index1 = (N_SLICE2 * this.URtoDF + this.FRtoBR) * N_PARITY + this.parity;
+        d1 = this.pruning('sliceURtoDFParity', index1);
+        index2 = (N_SLICE2 * this.URFtoDLF + this.FRtoBR) * N_PARITY + this.parity;
+        d2 = this.pruning('sliceURFtoDLFParity', index2);
+        return max(d1, d2);
+      }
+
+      // Initialize phase 2 coordinates
+      init2(top = true) {
+        if (this.parent === null) {
+          return;
+        }
+        // For other states, the phase 2 state is computed based on
+        // parent's state.
+        // Already assigned for the initial state
+        this.parent.init2(false);
+        this.URFtoDLF = this.move('URFtoDLF', this.parent.URFtoDLF, this.lastMove);
+        this.FRtoBR = this.move('FRtoBR', this.parent.FRtoBR, this.lastMove);
+        this.parity = this.move('parity', this.parent.parity, this.lastMove);
+        this.URtoUL = this.move('URtoUL', this.parent.URtoUL, this.lastMove);
+        this.UBtoDF = this.move('UBtoDF', this.parent.UBtoDF, this.lastMove);
+        if (top) {
+          // This is the initial phase 2 state. Get the URtoDF coordinate
+          // by merging URtoUL and UBtoDF
+          return this.URtoDF = this.move('mergeURtoDF', this.URtoUL, this.UBtoDF);
+        }
+      }
+
+      // Compute the next phase 2 state for the given move
+      next2(move) {
+        var next;
+        next = freeStates.pop();
+        next.parent = this;
+        next.lastMove = move;
+        next.depth = this.depth + 1;
+        next.URFtoDLF = this.move('URFtoDLF', this.URFtoDLF, move);
+        next.FRtoBR = this.move('FRtoBR', this.FRtoBR, move);
+        next.parity = this.move('parity', this.parity, move);
+        next.URtoDF = this.move('URtoDF', this.URtoDF, move);
+        return next;
+      }
+
+    };
+    solution = null;
+    phase1search = function(state) {
+      var depth, m, ref, results;
+      depth = 0;
+      results = [];
+      for (depth = m = 1, ref = maxDepth; (1 <= ref ? m <= ref : m >= ref); depth = 1 <= ref ? ++m : --m) {
+        phase1(state, depth);
+        if (solution !== null) {
+          break;
+        }
+        results.push(depth++);
+      }
+      return results;
+    };
+    phase1 = function(state, depth) {
+      var len, m, move, next, ref, ref1, results;
+      if (depth === 0) {
+        if (state.minDist1() === 0) {
+          // Make sure we don't start phase 2 with a phase 2 move as the
+          // last move in phase 1, because phase 2 would then repeat the
+          // same move.
+          if (state.lastMove === null || (ref = state.lastMove, indexOf.call(allMoves2, ref) < 0)) {
+            return phase2search(state);
+          }
+        }
+      } else if (depth > 0) {
+        if (state.minDist1() <= depth) {
+          ref1 = state.moves1();
+          results = [];
+          for (m = 0, len = ref1.length; m < len; m++) {
+            move = ref1[m];
+            next = state.next1(move);
+            phase1(next, depth - 1);
+            freeStates.push(next);
+            if (solution !== null) {
+              break;
+            } else {
+              results.push(void 0);
+            }
+          }
+          return results;
+        }
+      }
+    };
+    phase2search = function(state) {
+      var depth, m, ref, results;
+      // Initialize phase 2 coordinates
+      state.init2();
+      results = [];
+      for (depth = m = 1, ref = maxDepth - state.depth; (1 <= ref ? m <= ref : m >= ref); depth = 1 <= ref ? ++m : --m) {
+        phase2(state, depth);
+        if (solution !== null) {
+          break;
+        }
+        results.push(depth++);
+      }
+      return results;
+    };
+    phase2 = function(state, depth) {
+      var len, m, move, next, ref, results;
+      if (depth === 0) {
+        if (state.minDist2() === 0) {
+          return solution = state.solution();
+        }
+      } else if (depth > 0) {
+        if (state.minDist2() <= depth) {
+          ref = state.moves2();
+          results = [];
+          for (m = 0, len = ref.length; m < len; m++) {
+            move = ref[m];
+            next = state.next2(move);
+            phase2(next, depth - 1);
+            freeStates.push(next);
+            if (solution !== null) {
+              break;
+            } else {
+              results.push(void 0);
+            }
+          }
+          return results;
+        }
+      }
+    };
+    freeStates = (function() {
+      var m, ref, results;
+      results = [];
+      for (x = m = 0, ref = maxDepth + 1; (0 <= ref ? m <= ref : m >= ref); x = 0 <= ref ? ++m : --m) {
+        results.push(new State);
+      }
+      return results;
+    })();
+    state = freeStates.pop().init(this);
+    phase1search(state);
+    freeStates.push(state);
+    // Trim the trailing space
+    if (solution.length > 0) {
+      solution = solution.substring(0, solution.length - 1);
+    }
+    return solution;
+  };
+
+  faceNums = {
+    U: 0,
+    R: 1,
+    F: 2,
+    D: 3,
+    L: 4,
+    B: 5
+  };
+
+  faceNames = {
+    0: 'U',
+    1: 'R',
+    2: 'F',
+    3: 'D',
+    4: 'L',
+    5: 'B'
+  };
+
+  Cube.prototype.solve = function(maxDepth = 22) {
+    var clone, len, m, move, ref, rotation, solution, upright, uprightSolution;
+    clone = this.clone();
+    upright = clone.upright();
+    clone.move(upright);
+    rotation = new Cube().move(upright).center;
+    uprightSolution = clone.solveUpright(maxDepth);
+    solution = [];
+    ref = uprightSolution.split(' ');
+    for (m = 0, len = ref.length; m < len; m++) {
+      move = ref[m];
+      solution.push(faceNames[rotation[faceNums[move[0]]]]);
+      if (move.length > 1) {
+        solution[solution.length - 1] += move[1];
+      }
+    }
+    return solution.join(' ');
+  };
+
+  Cube.scramble = function() {
+    return Cube.inverse(Cube.random().solve());
+  };
+
+}).call(this);
+
+</script>
+
+<script id="core-js">
+/* ===== Zauberwürfel-Kern: Würfel-Modell, Züge, Prüfung, Farberkennung (ohne Browser-Abhängigkeiten) ===== */
+(function (G) {
+  'use strict';
+  var FACES = ['U', 'R', 'F', 'D', 'L', 'B'];
+  // Koordinaten: x = rechts, y = oben, z = vorne (zum Betrachter)
+  var NORMAL = { U: [0, 1, 0], R: [1, 0, 0], F: [0, 0, 1], D: [0, -1, 0], L: [-1, 0, 0], B: [0, 0, -1] };
+
+  // Position des Steins für Feld (Reihe r, Spalte c) einer Seite – Standard-Lage wie bei Kociemba
+  function posOf(f, r, c) {
+    switch (f) {
+      case 'U': return [c - 1, 1, r - 1];
+      case 'R': return [1, 1 - r, 1 - c];
+      case 'F': return [c - 1, 1 - r, 1];
+      case 'D': return [c - 1, -1, 1 - r];
+      case 'L': return [-1, 1 - r, c - 1];
+      case 'B': return [1 - c, 1 - r, -1];
+    }
+  }
+  function keyOf(p, n) { return p.map(function (v) { return v + 0; }).join(',') + '|' + n.map(function (v) { return v + 0; }).join(','); }
+
+  var FACELETS = [];
+  var KEY = new Map();
+  FACES.forEach(function (f, fi) {
+    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) {
+      var p = posOf(f, r, c);
+      FACELETS.push({ face: f, pos: p, normal: NORMAL[f] });
+      KEY.set(keyOf(p, NORMAL[f]), fi * 9 + r * 3 + c);
+    }
+  });
+  function faceletAt(pos, normal) {
+    var i = KEY.get(keyOf(pos, normal));
+    return i === undefined ? -1 : i;
+  }
+
+  // 90°-Drehung gegen den Uhrzeigersinn (rechte-Hand-Regel) um Achse 0=x, 1=y, 2=z
+  function rotCCW(v, ax) {
+    var x = v[0], y = v[1], z = v[2];
+    if (ax === 0) return [x, -z, y];
+    if (ax === 1) return [z, y, -x];
+    return [-y, x, z];
+  }
+  function rotate(v, n, quarters) {
+    var ax = n[0] ? 0 : n[1] ? 1 : 2;
+    var q = (((quarters * n[ax]) % 4) + 4) % 4;
+    var r = v;
+    while (q--) r = rotCCW(r, ax);
+    return r;
+  }
+  function dot(a, b) { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
+
+  // Zug-Tabellen: PERM[zug][ziel] = quelle
+  var SUFFIX = { 1: '', 2: '2', 3: "'" };
+  var PERM = {};
+  var MOVES = [];
+  FACES.forEach(function (f) {
+    var n = NORMAL[f];
+    [1, 2, 3].forEach(function (t) {
+      var perm = [];
+      for (var i = 0; i < 54; i++) perm[i] = i;
+      FACELETS.forEach(function (fl, i) {
+        if (dot(fl.pos, n) !== 1) return;
+        // Uhrzeigersinn von außen gesehen = negative Drehung um die äußere Normale
+        var j = faceletAt(rotate(fl.pos, n, -t), rotate(fl.normal, n, -t));
+        perm[j] = i;
+      });
+      var name = f + SUFFIX[t];
+      PERM[name] = perm;
+      MOVES.push(name);
+    });
+  });
+
+  function parseMoves(str) {
+    if (Array.isArray(str)) return str.slice();
+    return String(str || '').trim().split(/\s+/).filter(Boolean).map(function (m) {
+      var f = m[0].toUpperCase();
+      if (FACES.indexOf(f) < 0) throw new Error('Unbekannter Zug: ' + m);
+      if (m.indexOf('2') >= 0) return f + '2';
+      if (m.indexOf("'") >= 0 || m.indexOf('’') >= 0) return f + "'";
+      return f;
+    });
+  }
+  function applyMove(state, m) {
+    var p = PERM[m];
+    if (!p) throw new Error('Unbekannter Zug: ' + m);
+    var out = new Array(54);
+    for (var j = 0; j < 54; j++) out[j] = state[p[j]];
+    return out;
+  }
+  function applyMoves(state, moves) {
+    return parseMoves(moves).reduce(applyMove, state.slice());
+  }
+  function turnsOf(m) { return m.length === 1 ? 1 : m[1] === '2' ? 2 : 3; }
+  function invertMove(m) { var t = turnsOf(m); return m[0] + SUFFIX[t === 2 ? 2 : 4 - t]; }
+
+  // ----- Farben -----
+  var PALETTE = [
+    { id: 0, name: 'Weiß', adj: 'weiße', hex: '#ffffff', cam: [215, 215, 215] },
+    { id: 1, name: 'Gelb', adj: 'gelbe', hex: '#ffd500', cam: [215, 200, 40] },
+    { id: 2, name: 'Rot', adj: 'rote', hex: '#d0102a', cam: [180, 25, 35] },
+    { id: 3, name: 'Orange', adj: 'orange', hex: '#ff7a00', cam: [235, 110, 30] },
+    { id: 4, name: 'Blau', adj: 'blaue', hex: '#1460d6', cam: [25, 70, 170] },
+    { id: 5, name: 'Grün', adj: 'grüne', hex: '#10a04a', cam: [25, 150, 70] }
+  ];
+  var SCHEME = { U: 0, R: 2, F: 5, D: 1, L: 3, B: 4 }; // übliches Farbschema
+  function solvedColors(scheme) {
+    scheme = scheme || SCHEME;
+    var out = [];
+    FACES.forEach(function (f) { for (var k = 0; k < 9; k++) out.push(scheme[f]); });
+    return out;
+  }
+  function isSolved(colors) {
+    for (var f = 0; f < 6; f++) for (var k = 0; k < 9; k++) {
+      if (colors[f * 9 + k] !== colors[f * 9 + 4]) return false;
+    }
+    return true;
+  }
+  function rotateFaceCW(colors, fi) {
+    var out = colors.slice();
+    for (var r = 0; r < 3; r++) for (var c = 0; c < 3; c++) {
+      out[fi * 9 + r * 3 + c] = colors[fi * 9 + (2 - c) * 3 + r];
+    }
+    return out;
+  }
+
+  // ----- Prüfen (nach Kociembas Facelet->Cubie-Umrechnung) -----
+  function fi(face, n) { return FACES.indexOf(face) * 9 + n - 1; }
+  var CORNER_F = [
+    [fi('U', 9), fi('R', 1), fi('F', 3)], [fi('U', 7), fi('F', 1), fi('L', 3)],
+    [fi('U', 1), fi('L', 1), fi('B', 3)], [fi('U', 3), fi('B', 1), fi('R', 3)],
+    [fi('D', 3), fi('F', 9), fi('R', 7)], [fi('D', 1), fi('L', 9), fi('F', 7)],
+    [fi('D', 7), fi('B', 9), fi('L', 7)], [fi('D', 9), fi('R', 9), fi('B', 7)]
+  ];
+  var CORNER_C = [['U', 'R', 'F'], ['U', 'F', 'L'], ['U', 'L', 'B'], ['U', 'B', 'R'],
+    ['D', 'F', 'R'], ['D', 'L', 'F'], ['D', 'B', 'L'], ['D', 'R', 'B']];
+  var EDGE_F = [
+    [fi('U', 6), fi('R', 2)], [fi('U', 8), fi('F', 2)], [fi('U', 4), fi('L', 2)], [fi('U', 2), fi('B', 2)],
+    [fi('D', 6), fi('R', 8)], [fi('D', 2), fi('F', 8)], [fi('D', 4), fi('L', 8)], [fi('D', 8), fi('B', 8)],
+    [fi('F', 6), fi('R', 4)], [fi('F', 4), fi('L', 6)], [fi('B', 6), fi('L', 4)], [fi('B', 4), fi('R', 6)]
+  ];
+  var EDGE_C = [['U', 'R'], ['U', 'F'], ['U', 'L'], ['U', 'B'], ['D', 'R'], ['D', 'F'], ['D', 'L'], ['D', 'B'],
+    ['F', 'R'], ['F', 'L'], ['B', 'L'], ['B', 'R']];
+
+  function parity(perm) {
+    var p = 0;
+    for (var i = 0; i < perm.length; i++) for (var j = i + 1; j < perm.length; j++) if (perm[i] > perm[j]) p++;
+    return p % 2;
+  }
+
+  function validate(colors) {
+    var problems = [];
+    var missing = [];
+    colors.forEach(function (c, i) { if (c === -1 || c === undefined || c === null) missing.push(i); });
+    if (missing.length) {
+      problems.push({ text: 'Es fehlen noch ' + missing.length + ' Farben. Tippe die grauen Felder an und gib ihnen eine Farbe.', cells: missing });
+      return { ok: false, problems: problems };
+    }
+    var count = [0, 0, 0, 0, 0, 0];
+    colors.forEach(function (c) { count[c]++; });
+    PALETTE.forEach(function (p) {
+      var n = count[p.id];
+      if (n !== 9) {
+        var cells = [];
+        colors.forEach(function (c, i) { if (c === p.id) cells.push(i); });
+        problems.push({
+          text: n > 9 ? p.name + ' gibt es ' + n + '×. Es dürfen nur 9 sein – ' + (n - 9) + ' davon ' + (n - 9 === 1 ? 'ist' : 'sind') + ' falsch.'
+            : p.name + ' gibt es nur ' + n + '×. Es müssen genau 9 sein – es fehlen ' + (9 - n) + '.',
+          cells: n > 9 ? cells : []
+        });
+      }
+    });
+    if (problems.length) return { ok: false, problems: problems };
+
+    var centerColor = FACES.map(function (f, k) { return colors[k * 9 + 4]; });
+    var seen = {};
+    for (var k = 0; k < 6; k++) {
+      if (seen[centerColor[k]] !== undefined) {
+        problems.push({ text: 'Zwei Mittelfelder haben die gleiche Farbe (' + PALETTE[centerColor[k]].name + '). Jede Seite hat aber eine andere Mitte!', cells: [seen[centerColor[k]] * 9 + 4, k * 9 + 4] });
+        return { ok: false, problems: problems };
+      }
+      seen[centerColor[k]] = k;
+    }
+    var faceOfColor = {};
+    FACES.forEach(function (f, k) { faceOfColor[centerColor[k]] = f; });
+    var fl = colors.map(function (c) { return faceOfColor[c]; });
+
+    var cp = [], co = [], ep = [], eo = [];
+    var i, j, ori;
+    for (i = 0; i < 8; i++) {
+      for (ori = 0; ori < 3; ori++) {
+        var x = fl[CORNER_F[i][ori]];
+        if (x === 'U' || x === 'D') break;
+      }
+      var found = -1;
+      if (ori < 3) {
+        var c1 = fl[CORNER_F[i][(ori + 1) % 3]], c2 = fl[CORNER_F[i][(ori + 2) % 3]];
+        for (j = 0; j < 8; j++) if (CORNER_C[j][1] === c1 && CORNER_C[j][2] === c2) found = j;
+      }
+      if (found < 0) {
+        problems.push({ text: 'Diese Ecke (blinkt) gibt es auf einem echten Würfel nicht. Vermutlich ist dort eine Farbe falsch.', cells: CORNER_F[i].slice() });
+      } else { cp[i] = found; co[i] = ori; }
+    }
+    for (i = 0; i < 12; i++) {
+      var a = fl[EDGE_F[i][0]], b = fl[EDGE_F[i][1]], fe = -1, fo = 0;
+      for (j = 0; j < 12; j++) {
+        if (EDGE_C[j][0] === a && EDGE_C[j][1] === b) { fe = j; fo = 0; }
+        if (EDGE_C[j][0] === b && EDGE_C[j][1] === a) { fe = j; fo = 1; }
+      }
+      if (fe < 0) {
+        problems.push({ text: 'Diese Kante (blinkt) gibt es auf einem echten Würfel nicht. Vermutlich ist dort eine Farbe falsch.', cells: EDGE_F[i].slice() });
+      } else { ep[i] = fe; eo[i] = fo; }
+    }
+    if (problems.length) return { ok: false, problems: problems };
+
+    var dupC = {}, dupE = {};
+    for (i = 0; i < 8; i++) { if (dupC[cp[i]] !== undefined) problems.push({ text: 'Eine Ecke gibt es doppelt (beide blinken). Eine davon hat eine falsche Farbe.', cells: CORNER_F[i].concat(CORNER_F[dupC[cp[i]]]) }); dupC[cp[i]] = i; }
+    for (i = 0; i < 12; i++) { if (dupE[ep[i]] !== undefined) problems.push({ text: 'Eine Kante gibt es doppelt (beide blinken). Eine davon hat eine falsche Farbe.', cells: EDGE_F[i].concat(EDGE_F[dupE[ep[i]]]) }); dupE[ep[i]] = i; }
+    if (problems.length) return { ok: false, problems: problems };
+
+    var twist = co.reduce(function (s, v) { return s + v; }, 0) % 3;
+    var flip = eo.reduce(function (s, v) { return s + v; }, 0) % 2;
+    if (twist) problems.push({ text: 'Eine Ecke ist verdreht. So ein Würfel ist nicht lösbar – außer jemand hat eine Ecke herausgedreht. Meistens ist aber nur eine Farbe falsch erkannt: Vergleiche die Ecken nochmal mit deinem Würfel.', cells: [] });
+    if (flip) problems.push({ text: 'Eine Kante ist umgedreht. So ein Würfel ist nicht lösbar – außer jemand hat den Würfel auseinandergebaut. Meistens ist aber nur eine Farbe falsch: Vergleiche die Kanten nochmal mit deinem Würfel.', cells: [] });
+    if (!twist && !flip && parity(cp) !== parity(ep)) problems.push({ text: 'Zwei Steine sind vertauscht. So ist der Würfel nicht lösbar. Vielleicht wurde eine Seite verdreht fotografiert oder zwei Farben sind falsch.', cells: [] });
+    if (problems.length) return { ok: false, problems: problems };
+
+    return { ok: true, problems: [], facelets: fl.join(''), centerColor: centerColor };
+  }
+
+  // ----- Zug-Beschreibung für Kinder -----
+  var FACE_NAME = { U: 'Obere Seite', D: 'Untere Seite', R: 'Rechte Seite', L: 'Linke Seite', F: 'Vordere Seite', B: 'Hintere Seite' };
+  var TEXT = {
+    R: { 1: ['nach oben drehen', 'up'], 3: ['nach unten drehen', 'down'] },
+    L: { 1: ['nach unten drehen', 'down'], 3: ['nach oben drehen', 'up'] },
+    U: { 1: ['nach links drehen', 'left'], 3: ['nach rechts drehen', 'right'] },
+    D: { 1: ['nach rechts drehen', 'right'], 3: ['nach links drehen', 'left'] },
+    F: { 1: ['drehen wie ein Uhrzeiger', 'cw'], 3: ['drehen gegen den Uhrzeiger', 'ccw'] },
+    B: { 1: ['oben nach links drehen', 'ccw'], 3: ['oben nach rechts drehen', 'cw'] }
+  };
+  function describeMove(m) {
+    var f = m[0], t = turnsOf(m);
+    var base = TEXT[f][t === 2 ? 1 : t];
+    var text = t === 2 ? FACE_NAME[f] + ' 2× drehen (halbe Runde)' : FACE_NAME[f] + (f === 'B' ? ': ' : ' ') + base[0];
+    return { face: f, turns: t, text: text, arrow: base[1], double: t === 2 };
+  }
+
+  // ----- Farberkennung -----
+  function rgb2hsv(rgb) {
+    var r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, h = 0;
+    if (d) {
+      if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+      h *= 60; if (h < 0) h += 360;
+    }
+    return [h, mx ? d / mx : 0, mx];
+  }
+  function rgb2lab(rgb) {
+    var c = rgb.map(function (v) { v /= 255; return v > 0.04045 ? Math.pow((v + 0.055) / 1.055, 2.4) : v / 12.92; });
+    var x = (c[0] * 0.4124 + c[1] * 0.3576 + c[2] * 0.1805) / 0.95047;
+    var y = (c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722);
+    var z = (c[0] * 0.0193 + c[1] * 0.1192 + c[2] * 0.9505) / 1.08883;
+    var f = function (t) { return t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116; };
+    var fx = f(x), fy = f(y), fz = f(z);
+    return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+  }
+  // Merkmal einer Farbe: Helligkeit (schwach gewichtet), Farbton-Achsen a/b und Sättigung (trennt Weiß von Farben)
+  function feat(rgb) {
+    var lab = rgb2lab(rgb), s = rgb2hsv(rgb)[1];
+    return [lab[0] * 0.5, lab[1], lab[2], s * 70];
+  }
+  function labDist(a, b) {
+    var sum = 0;
+    for (var i = 0; i < a.length; i++) sum += (a[i] - b[i]) * (a[i] - b[i]);
+    return Math.sqrt(sum);
+  }
+  var PAL_LAB = PALETTE.map(function (p) { return feat(p.cam); });
+  function classifyQuick(rgb) {
+    var hsv = rgb2hsv(rgb);
+    if (hsv[1] < 0.22 && hsv[2] > 0.35) return 0;
+    var lab = feat(rgb), best = 0, bd = Infinity;
+    PAL_LAB.forEach(function (pl, k) { var d = labDist(lab, pl); if (d < bd) { bd = d; best = k; } });
+    return best;
+  }
+  function permutations(arr) {
+    if (arr.length <= 1) return [arr];
+    var out = [];
+    arr.forEach(function (v, i) {
+      permutations(arr.slice(0, i).concat(arr.slice(i + 1))).forEach(function (p) { out.push([v].concat(p)); });
+    });
+    return out;
+  }
+  // Alle 54 Messwerte gemeinsam zuordnen: jede Farbe genau 9×, Mittelfelder als Vorbild
+  function assignColors(samples) {
+    var labs = samples.map(feat);
+    var centers = [4, 13, 22, 31, 40, 49];
+    // 1) Mittelfelder den 6 Farben zuordnen (beste Permutation)
+    var best = null, bestCost = Infinity;
+    permutations([0, 1, 2, 3, 4, 5]).forEach(function (perm) {
+      var cost = 0;
+      for (var k = 0; k < 6; k++) {
+        var lab = labs[centers[k]];
+        var d = labDist(lab, PAL_LAB[perm[k]]);
+        if (perm[k] === 0) { var hsv = rgb2hsv(samples[centers[k]]); d *= hsv[1] < 0.25 ? 0.5 : 1.5; }
+        cost += d;
+      }
+      if (cost < bestCost) { bestCost = cost; best = perm; }
+    });
+    // 2) Ausgeglichene Zuordnung (je 8 Felder pro Mitte), mehrmals verfeinert
+    var refs = centers.map(function (c) { return labs[c].slice(); });
+    var cluster = new Array(54);
+    centers.forEach(function (c, k) { cluster[c] = k; });
+    for (var iter = 0; iter < 4; iter++) {
+      var pairs = [];
+      for (var i = 0; i < 54; i++) {
+        if (centers.indexOf(i) >= 0) continue;
+        for (var k = 0; k < 6; k++) pairs.push([labDist(labs[i], refs[k]), i, k]);
+      }
+      pairs.sort(function (a, b) { return a[0] - b[0]; });
+      var cap = [0, 0, 0, 0, 0, 0], done = {};
+      pairs.forEach(function (p) {
+        if (done[p[1]] || cap[p[2]] >= 8) return;
+        done[p[1]] = true; cap[p[2]]++; cluster[p[1]] = p[2];
+      });
+      // Verbessern: zwei Felder tauschen, wenn beide dadurch besser passen
+      var dist = function (i, k) { return labDist(labs[i], refs[k]); };
+      for (var pass = 0, improved = true; improved && pass < 20; pass++) {
+        improved = false;
+        for (var a = 0; a < 54; a++) {
+          if (centers.indexOf(a) >= 0) continue;
+          for (var b = a + 1; b < 54; b++) {
+            if (centers.indexOf(b) >= 0 || cluster[a] === cluster[b]) continue;
+            var ka = cluster[a], kb = cluster[b];
+            if (dist(a, kb) + dist(b, ka) < dist(a, ka) + dist(b, kb) - 1e-9) {
+              cluster[a] = kb; cluster[b] = ka; improved = true;
+            }
+          }
+        }
+      }
+      refs = refs.map(function (r, k) {
+        var s = [0, 0, 0, 0], n = 0;
+        for (var i2 = 0; i2 < 54; i2++) if (cluster[i2] === k) { for (var q = 0; q < 4; q++) s[q] += labs[i2][q]; n++; }
+        return s.map(function (v) { return v / n; });
+      });
+    }
+    return cluster.map(function (k) { return best[k]; });
+  }
+
+  // ----- Zufälliges Mischen -----
+  function randomScramble(n, rnd) {
+    rnd = rnd || Math.random;
+    var out = [], last = '', axisOf = { U: 0, D: 0, R: 1, L: 1, F: 2, B: 2 }, prev2 = '';
+    while (out.length < n) {
+      var f = FACES[Math.floor(rnd() * 6)];
+      if (f === last) continue;
+      if (axisOf[f] === axisOf[last] && f === prev2) continue;
+      prev2 = last; last = f;
+      out.push(f + SUFFIX[1 + Math.floor(rnd() * 3)]);
+    }
+    return out;
+  }
+
+  G.Kern = {
+    FACES: FACES, NORMAL: NORMAL, FACELETS: FACELETS, MOVES: MOVES, PALETTE: PALETTE, SCHEME: SCHEME,
+    faceletAt: faceletAt, parseMoves: parseMoves, applyMove: applyMove, applyMoves: applyMoves,
+    invertMove: invertMove, turnsOf: turnsOf, solvedColors: solvedColors, isSolved: isSolved,
+    rotateFaceCW: rotateFaceCW, validate: validate, describeMove: describeMove, FACE_NAME: FACE_NAME,
+    rgb2hsv: rgb2hsv, rgb2lab: rgb2lab, classifyQuick: classifyQuick, assignColors: assignColors,
+    randomScramble: randomScramble
+  };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+const K = window.Kern;
+const $ = (id) => document.getElementById(id);
+const PAL = K.PALETTE;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ---------- Ja/Nein-Fenster ---------- */
+function ask(text, yes = 'Ja', no = 'Nein') {
+  return new Promise((resolve) => {
+    $('modal-text').textContent = text;
+    $('modal-yes').textContent = yes;
+    $('modal-no').textContent = no;
+    $('modal').classList.add('on');
+    const done = (v) => { $('modal').classList.remove('on'); $('modal-yes').onclick = $('modal-no').onclick = null; resolve(v); };
+    $('modal-yes').onclick = () => done(true);
+    $('modal-no').onclick = () => done(false);
+  });
+}
+
+/* ---------- Löser (im Hintergrund-Worker) ---------- */
+const Solver = (() => {
+  const src = $('cubejs-src').textContent;
+  let worker = null, mainCube = null, nextId = 1;
+  const waiting = new Map();
+  let readyResolve;
+  const ready = new Promise((r) => { readyResolve = r; });
+  const useMainThread = () => {
+    if (mainCube) return;
+    (0, eval)(src);
+    mainCube = window.Cube;
+    setTimeout(() => { mainCube.initSolver(); readyResolve(); }, 30);
+  };
+  try {
+    const code = src + '\nself.onmessage=function(e){var d=e.data;try{if(d.cmd==="init"){Cube.initSolver();postMessage({cmd:"init"});}else{postMessage({cmd:"solve",id:d.id,solution:Cube.fromString(d.facelets).solve()});}}catch(err){postMessage({cmd:"error",id:d.id,message:String(err)});}};';
+    worker = new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+    worker.onmessage = (e) => {
+      const d = e.data;
+      if (d.cmd === 'init') readyResolve();
+      else {
+        const w = waiting.get(d.id); waiting.delete(d.id);
+        if (!w) return;
+        if (d.cmd === 'solve') w.resolve(d.solution); else w.reject(new Error(d.message));
+      }
+    };
+    worker.onerror = (e) => { e.preventDefault(); worker = null; useMainThread(); };
+    worker.postMessage({ cmd: 'init' });
+  } catch (err) {
+    worker = null; useMainThread();
+  }
+  async function solve(facelets) {
+    await ready;
+    if (worker) return new Promise((resolve, reject) => { const id = nextId++; waiting.set(id, { resolve, reject }); worker.postMessage({ cmd: 'solve', id, facelets }); });
+    return mainCube.fromString(facelets).solve();
+  }
+  return { ready, solve };
+})();
+Solver.ready.then(() => { $('solver-status').textContent = '✅ Das Löse-Gehirn ist bereit!'; });
+
+/* ---------- Zustand ---------- */
+const S = {
+  colors: K.solvedColors(),
+  samples: new Array(54).fill(null),
+  paint: 0,
+  scanStep: 0,
+  pending: null,
+  scrambleText: '',
+  solution: [],
+  start: null,
+  step: 0,
+  busy: false,
+  playing: false,
+};
+function show(id) {
+  document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
+  if (id !== 's-scan') stopCamera();
+  window.scrollTo(0, 0);
+}
+const colorHex = (c) => (c >= 0 ? PAL[c].hex : 'var(--empty)');
+
+/* ---------- Bildchen: welche Seite ---------- */
+function facePic(step) {
+  // kleiner Würfel (Ansicht von vorne-oben-rechts), betroffene Seite hervorgehoben
+  const hi = '#ff2e88', lo = '#e9e4fb';
+  const top = step === 4 ? hi : lo, front = step === 0 ? hi : lo, right = step === 1 ? hi : lo;
+  const extra = { 2: 'hinten', 3: 'links', 5: 'unten' }[step];
+  return `<polygon points="10,26 40,14 70,26 40,38" fill="${top}" stroke="#333" stroke-width="2"/>
+    <polygon points="10,26 40,38 40,72 10,60" fill="${front}" stroke="#333" stroke-width="2"/>
+    <polygon points="40,38 70,26 70,60 40,72" fill="${right}" stroke="#333" stroke-width="2"/>
+    ${extra ? `<text x="40" y="79" text-anchor="middle" font-size="11" font-weight="700" fill="${hi}">${extra}</text>` : ''}`;
+}
+
+/* ---------- Kamera ---------- */
+const SCAN_ORDER = ['F', 'R', 'B', 'L', 'U', 'D'];
+const SCAN_NAME = { F: 'Vorne', R: 'Rechts', B: 'Hinten', L: 'Links', U: 'Oben', D: 'Unten' };
+let stream = null;
+async function startCamera() {
+  $('cam-msg').textContent = '';
+  if (stream) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    $('cam-msg').textContent = 'Die Kamera geht hier leider nicht. Mach ein Foto mit „Foto auswählen“.';
+    $('btn-shot').disabled = true;
+    return;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+    const v = $('video');
+    v.srcObject = stream;
+    await v.play().catch(() => {});
+    $('btn-shot').disabled = false;
+  } catch (err) {
+    $('cam-msg').textContent = 'Ich darf die Kamera nicht benutzen. Du kannst stattdessen ein Foto auswählen – oder die Farben eintippen.';
+    $('btn-shot').disabled = true;
+  }
+}
+function stopCamera() {
+  if (stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; }
+}
+function sampleGrid(src, w, h) {
+  const N = 300;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = N;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const side = Math.min(w, h);
+  ctx.drawImage(src, (w - side) / 2, (h - side) / 2, side, side, 0, 0, N, N);
+  const out = [];
+  const g0 = N * 0.1, cell = N * 0.8 / 3, rad = cell * 0.22;
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+    const cx = g0 + cell * (c + 0.5), cy = g0 + cell * (r + 0.5);
+    const d = ctx.getImageData(Math.round(cx - rad), Math.round(cy - rad), Math.round(rad * 2), Math.round(rad * 2)).data;
+    // Mittelwert ohne die hellsten Glanzpunkte
+    const px = [];
+    for (let i = 0; i < d.length; i += 4) px.push([d[i], d[i + 1], d[i + 2]]);
+    px.sort((a, b) => (a[0] + a[1] + a[2]) - (b[0] + b[1] + b[2]));
+    const keep = px.slice(Math.floor(px.length * 0.1), Math.floor(px.length * 0.85));
+    const s = keep.reduce((a, p) => [a[0] + p[0], a[1] + p[1], a[2] + p[2]], [0, 0, 0]);
+    out.push(s.map((v) => v / keep.length));
+  }
+  return out;
+}
+function renderScan() {
+  const step = S.scanStep, face = SCAN_ORDER[step];
+  $('scan-title').textContent = `Seite ${step + 1} von 6: ${SCAN_NAME[face]}`;
+  $('scan-dots').innerHTML = SCAN_ORDER.map((f, i) => {
+    const fi = K.FACES.indexOf(f);
+    const c = S.samples[fi * 9 + 4] ? S.colors[fi * 9 + 4] : -1;
+    return `<div class="dot ${i === step ? 'now' : ''}" style="background:${c >= 0 ? PAL[c].hex : ''}">${c >= 0 ? '' : i + 1}</div>`;
+  }).join('');
+  const fC = S.samples[22] ? PAL[S.colors[22]] : null;
+  const front = fC ? `die ${fC.adj} Mitte` : 'die Seite von Foto 1';
+  const texts = [
+    'Halte den Würfel so, dass eine Seite genau zur Kamera schaut. Das ist jetzt <b>VORNE</b>. Merk dir, welche Seite <b>OBEN</b> ist – die bleibt bei den nächsten 3 Fotos immer oben!',
+    'Drehe den ganzen Würfel eine Vierteldrehung <b>nach links</b> (oben bleibt oben). Jetzt schaut die <b>rechte</b> Seite zur Kamera.',
+    'Noch eine Vierteldrehung <b>nach links</b>. Jetzt siehst du die <b>hintere</b> Seite.',
+    'Noch eine Vierteldrehung <b>nach links</b>. Jetzt siehst du die <b>linke</b> Seite.',
+    `Noch einmal nach links drehen, dann ist ${front} wieder vorne. Jetzt <b>kippe</b> den Würfel <b>zu dir hin</b>, bis die <b>obere</b> Seite zur Kamera schaut. ${cap(front)} zeigt dann nach <b>unten</b>.`,
+    `Kippe zurück, bis ${front} wieder vorne ist. Dann <b>kippe</b> ihn <b>von dir weg</b>, bis die <b>untere</b> Seite zur Kamera schaut. ${cap(front)} zeigt dann nach <b>oben</b>.`,
+  ];
+  $('scan-text').innerHTML = texts[step];
+  $('scan-pic').innerHTML = facePic(step);
+  $('scan-live').style.display = S.pending ? 'none' : '';
+  $('scan-check').style.display = S.pending ? '' : 'none';
+  $('photo').style.display = S.pending && S.pending.img ? '' : 'none';
+  $('video').style.display = S.pending && S.pending.img ? 'none' : '';
+  $('camhint').style.display = S.pending ? 'none' : '';
+  if (S.pending) {
+    $('scan-preview').innerHTML = S.pending.colors.map((c) => `<div style="background:${PAL[c].hex}"></div>`).join('');
+  }
+}
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+function takeSamples(samples, img) {
+  S.pending = { samples, colors: samples.map(K.classifyQuick), img };
+  renderScan();
+}
+$('btn-shot').onclick = () => {
+  const v = $('video');
+  if (!v.videoWidth) return;
+  v.pause();
+  const cv = document.createElement('canvas');
+  cv.width = v.videoWidth; cv.height = v.videoHeight;
+  cv.getContext('2d').drawImage(v, 0, 0);
+  $('photo').src = cv.toDataURL('image/jpeg', 0.85);
+  takeSamples(sampleGrid(v, v.videoWidth, v.videoHeight), true);
+};
+$('file').onchange = (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    $('photo').src = url;
+    takeSamples(sampleGrid(img, img.naturalWidth, img.naturalHeight), true);
+    e.target.value = '';
+  };
+  img.src = url;
+};
+$('btn-retake').onclick = () => { S.pending = null; $('video').play().catch(() => {}); renderScan(); };
+$('btn-accept').onclick = () => {
+  const fi = K.FACES.indexOf(SCAN_ORDER[S.scanStep]);
+  for (let k = 0; k < 9; k++) { S.samples[fi * 9 + k] = S.pending.samples[k]; S.colors[fi * 9 + k] = S.pending.colors[k]; }
+  S.pending = null;
+  $('video').play().catch(() => {});
+  if (S.scanStep < 5) { S.scanStep++; renderScan(); return; }
+  S.colors = K.assignColors(S.samples);
+  S.scrambleText = '';
+  openEdit('Alle 6 Seiten sind eingelesen! Vergleiche den Plan mit deinem Würfel und tippe falsche Felder an. Tipp: <b>Rot und Orange</b> verwechselt die Kamera am leichtesten.');
+};
+$('btn-scan-back').onclick = () => {
+  if (S.pending) { S.pending = null; renderScan(); return; }
+  if (S.scanStep > 0) { S.scanStep--; renderScan(); return; }
+  show('s-start');
+};
+$('btn-scan-manual').onclick = () => startManual();
+$('go-scan').onclick = () => {
+  S.scanStep = 0; S.pending = null; S.samples = new Array(54).fill(null);
+  S.colors = new Array(54).fill(-1);
+  show('s-scan'); renderScan(); startCamera();
+};
+
+/* ---------- Würfel-Plan (Eingabe & Korrektur) ---------- */
+const NET_POS = { U: [0, 3], L: [3, 0], F: [3, 3], R: [3, 6], B: [3, 9], D: [6, 3] };
+const NET_LABEL = { U: 'Oben', L: 'Links', F: 'Vorne', R: 'Rechts', B: 'Hinten', D: 'Unten' };
+let badCells = new Set();
+function buildNet() {
+  const net = $('net');
+  let html = '';
+  K.FACES.forEach((f, fi) => {
+    const [r0, c0] = NET_POS[f];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) {
+      const i = fi * 9 + r * 3 + c;
+      html += `<button class="cell ${r === 1 && c === 1 ? 'center' : ''}" data-i="${i}" aria-label="${NET_LABEL[f]} Feld ${r * 3 + c + 1}" style="grid-row:${r0 + r + 1};grid-column:${c0 + c + 1}"></button>`;
+    }
+  });
+  // Beschriftungen in freie Ecken
+  html += `<div class="facelabel" style="grid-row:3;grid-column:1/4">⬆ Oben</div>`;
+  html += `<div class="facelabel" style="grid-row:9;grid-column:7/10">⬇ Unten</div>`;
+  net.innerHTML = html;
+  net.onclick = (e) => {
+    const b = e.target.closest('.cell');
+    if (!b) return;
+    const i = +b.dataset.i;
+    S.colors[i] = S.paint;
+    badCells.delete(i);
+    renderNet();
+  };
+  $('palette').innerHTML = PAL.map((p) => `<button class="swatch" data-c="${p.id}" style="background:${p.hex}" aria-label="${p.name}"><span class="cnt"></span></button>`).join('');
+  $('palette').onclick = (e) => {
+    const b = e.target.closest('.swatch');
+    if (!b) return;
+    S.paint = +b.dataset.c;
+    renderNet();
+  };
+  $('rot-buttons').innerHTML = K.FACES.map((f, fi) => `<button class="btn light" data-f="${fi}">${NET_LABEL[f]} ↻</button>`).join('');
+  $('rot-buttons').onclick = (e) => {
+    const b = e.target.closest('[data-f]');
+    if (!b) return;
+    S.colors = K.rotateFaceCW(S.colors, +b.dataset.f);
+    renderNet();
+  };
+}
+function renderNet() {
+  document.querySelectorAll('#net .cell').forEach((b) => {
+    const i = +b.dataset.i;
+    b.style.background = colorHex(S.colors[i]);
+    b.classList.toggle('bad', badCells.has(i));
+  });
+  const cnt = [0, 0, 0, 0, 0, 0];
+  S.colors.forEach((c) => { if (c >= 0) cnt[c]++; });
+  document.querySelectorAll('#palette .swatch').forEach((b) => {
+    const c = +b.dataset.c;
+    b.classList.toggle('sel', c === S.paint);
+    const span = b.querySelector('.cnt');
+    span.textContent = cnt[c] + '/9' + (cnt[c] === 9 ? ' ✓' : '');
+    span.style.color = cnt[c] === 9 ? 'var(--ok)' : cnt[c] > 9 ? 'var(--warn)' : 'var(--muted)';
+  });
+}
+function setMsg(html, cls) { $('edit-msg').innerHTML = html ? `<div class="card ${cls || ''}">${html}</div>` : ''; }
+function openEdit(msg) {
+  badCells = new Set();
+  show('s-edit');
+  renderNet();
+  setMsg(msg ? `<p>${msg}</p>` : '');
+  $('scramble-info').textContent = S.scrambleText ? `So wurde dieser Beispiel-Würfel gemischt (das kannst du mit deinem echten Würfel nachmachen): ${S.scrambleText}` : '';
+}
+function startManual() {
+  S.colors = new Array(54).fill(-1);
+  K.FACES.forEach((f, fi) => { S.colors[fi * 9 + 4] = K.SCHEME[f]; });
+  S.scrambleText = '';
+  openEdit('Halte deinen Würfel so, dass <b>Grün vorne</b> und <b>Weiß oben</b> ist (wenn deine Mitten anders sind, tippe einfach die Mitten um). Male dann alle Felder so an, wie sie auf deinem Würfel sind.');
+}
+function startExample() {
+  const sc = K.randomScramble(20);
+  S.colors = K.applyMoves(K.solvedColors(), sc);
+  S.scrambleText = sc.join(' ');
+  openEdit('Das ist ein verdrehter Beispiel-Würfel. Drück auf <b>„Prüfen und lösen“</b>!');
+}
+$('go-manual').onclick = startManual;
+$('go-example').onclick = startExample;
+$('btn-example').onclick = async () => { if (await ask('Deine Farben durch einen Beispiel-Würfel ersetzen?')) startExample(); };
+$('btn-clear').onclick = async () => { if (await ask('Wirklich alle Farben löschen?', 'Ja, löschen')) startManual(); };
+$('btn-home').onclick = () => show('s-start');
+$('btn-check').onclick = checkAndSolve;
+
+async function checkAndSolve() {
+  const v = K.validate(S.colors);
+  if (!v.ok) {
+    badCells = new Set(v.problems.flatMap((p) => p.cells));
+    renderNet();
+    setMsg(`<h2>🤔 Da stimmt etwas nicht</h2><ul>${v.problems.map((p) => `<li>${p.text}</li>`).join('')}</ul>`, 'problems');
+    $('edit-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
+  if (K.isSolved(S.colors)) {
+    setMsg('<p class="party">🎉 Dein Würfel ist schon gelöst!</p>', 'okbox');
+    return;
+  }
+  setMsg('<p>✅ Der Würfel ist in Ordnung! 🧠 Ich denke nach …</p>', 'okbox');
+  $('btn-check').disabled = true;
+  try {
+    const sol = await Solver.solve(v.facelets);
+    const moves = K.parseMoves(sol);
+    // Sicherheits-Check: löst die Lösung den Würfel wirklich?
+    if (!K.isSolved(K.applyMoves(S.colors, moves))) throw new Error('Lösung passt nicht');
+    startSolve(moves);
+  } catch (err) {
+    setMsg('<p>Hoppla, beim Nachdenken ist etwas schiefgegangen. Versuch es bitte nochmal.</p>', 'problems');
+  } finally {
+    $('btn-check').disabled = false;
+  }
+}
+
+/* ---------- 3D-Würfel ---------- */
+class Cube3D {
+  constructor(el) {
+    this.el = el;
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    el.appendChild(this.renderer.domElement);
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    this.camTarget = new THREE.Vector3(4.3, 4, 6.8).setLength(10);
+    this.camera.position.copy(this.camTarget);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.4);
+    dl.position.set(3, 6, 5);
+    this.scene.add(dl);
+    this.root = new THREE.Group();
+    this.scene.add(this.root);
+    this.pivot = new THREE.Group();
+    this.cubies = [];
+    this.stickers = [];
+    const boxGeo = new THREE.BoxGeometry(0.96, 0.96, 0.96);
+    const boxMat = new THREE.MeshStandardMaterial({ color: 0x15121f, roughness: 0.6 });
+    const sGeo = roundedSquare(0.82, 0.13);
+    for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
+      if (!x && !y && !z) continue;
+      const g = new THREE.Group();
+      g.position.set(x, y, z);
+      g.userData.home = [x, y, z];
+      g.add(new THREE.Mesh(boxGeo, boxMat));
+      K.FACELETS.forEach((fl, i) => {
+        if (fl.pos[0] !== x || fl.pos[1] !== y || fl.pos[2] !== z) return;
+        const m = new THREE.Mesh(sGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 }));
+        const n = new THREE.Vector3(...fl.normal);
+        m.position.copy(n).multiplyScalar(0.485);
+        m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+        m.userData.home = i;
+        g.add(m);
+        this.stickers.push(m);
+      });
+      this.root.add(g);
+      this.cubies.push(g);
+    }
+    this.arrow = null;
+    this.anim = null;
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+    this.initDrag();
+    const loop = (t) => { this.tick(t); this.raf = requestAnimationFrame(loop); };
+    this.raf = requestAnimationFrame(loop);
+  }
+  resize() {
+    const w = this.el.clientWidth || 300, h = this.el.clientHeight || 300;
+    this.renderer.setSize(w, h, false);
+    this.camera.aspect = w / h;
+    this.camera.fov = w < h ? 46 : 36;
+    this.camera.updateProjectionMatrix();
+  }
+  initDrag() {
+    let last = null;
+    const c = this.renderer.domElement;
+    c.addEventListener('pointerdown', (e) => { last = [e.clientX, e.clientY]; c.setPointerCapture(e.pointerId); });
+    c.addEventListener('pointermove', (e) => {
+      if (!last) return;
+      const dx = e.clientX - last[0], dy = e.clientY - last[1];
+      last = [e.clientX, e.clientY];
+      const sph = new THREE.Spherical().setFromVector3(this.camTarget);
+      sph.theta -= dx * 0.01;
+      sph.phi = Math.min(Math.PI - 0.15, Math.max(0.15, sph.phi - dy * 0.01));
+      this.camTarget.setFromSpherical(sph);
+      this.camera.position.copy(this.camTarget);
+    });
+    const up = () => { last = null; };
+    c.addEventListener('pointerup', up);
+    c.addEventListener('pointercancel', up);
+  }
+  viewFace(f) {
+    const V = { U: [4, 6, 6], F: [4.3, 4, 6.8], R: [6, 3.6, 5.2], L: [-6, 3.6, 5.2], D: [4.3, -4.8, 6.2], B: [5.2, 3.8, -6] };
+    this.camTarget.set(...V[f]).setLength(10);
+  }
+  setColors(colors) {
+    this.cubies.forEach((g) => {
+      this.root.attach(g);
+      g.position.set(...g.userData.home);
+      g.quaternion.identity();
+    });
+    this.stickers.forEach((s) => {
+      const c = colors[s.userData.home];
+      s.userData.color = c;
+      s.material.color.set(c >= 0 ? PAL[c].hex : '#9a95ad');
+    });
+  }
+  readColors() {
+    this.root.updateMatrixWorld(true);
+    const out = new Array(54).fill(-1);
+    const q = new THREE.Quaternion(), p = new THREE.Vector3();
+    this.stickers.forEach((s) => {
+      s.getWorldQuaternion(q);
+      const n = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      s.parent.getWorldPosition(p);
+      const idx = K.faceletAt([p.x, p.y, p.z].map(Math.round), [n.x, n.y, n.z].map(Math.round));
+      if (idx >= 0) out[idx] = s.userData.color;
+    });
+    return out;
+  }
+  showArrow(move) {
+    if (this.arrow) { this.scene.remove(this.arrow); this.arrow.traverse((o) => o.geometry && o.geometry.dispose()); this.arrow = null; }
+    if (!move) return;
+    const t = K.turnsOf(move);
+    const dir = t === 3 ? 1 : -1; // Uhrzeigersinn von außen = abnehmender Winkel
+    const span = t === 2 ? Math.PI * 1.7 : Math.PI * 1.35;
+    const r = 1.2, a0 = Math.PI * 0.8;
+    class Arc extends THREE.Curve {
+      getPoint(u, target = new THREE.Vector3()) { const a = a0 + dir * span * u; return target.set(r * Math.cos(a), r * Math.sin(a), 0); }
+    }
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff2e88 });
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(new Arc(), 48, 0.09, 10, false), mat));
+    const aEnd = a0 + dir * span;
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.5, 18), mat);
+    cone.position.set(r * Math.cos(aEnd), r * Math.sin(aEnd), 0);
+    const tangent = new THREE.Vector3(-Math.sin(aEnd) * dir, Math.cos(aEnd) * dir, 0).normalize();
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+    cone.position.addScaledVector(tangent, 0.15);
+    g.add(cone);
+    const n = new THREE.Vector3(...K.NORMAL[move[0]]);
+    g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+    g.position.copy(n).multiplyScalar(1.62);
+    this.arrow = g;
+    this.scene.add(g);
+  }
+  turn(move, duration = 450) {
+    const f = move[0], t = K.turnsOf(move);
+    const axis = new THREE.Vector3(...K.NORMAL[f]);
+    const angle = -(t === 3 ? -1 : t) * Math.PI / 2;
+    const layer = this.cubies.filter((g) => Math.round(g.position.dot(axis)) === 1);
+    this.pivot.quaternion.identity();
+    this.root.add(this.pivot);
+    layer.forEach((g) => this.pivot.attach(g));
+    return new Promise((resolve) => {
+      const finish = () => {
+        this.pivot.quaternion.setFromAxisAngle(axis, angle);
+        this.pivot.updateMatrixWorld(true);
+        layer.forEach((g) => { this.root.attach(g); snap(g); });
+        this.root.remove(this.pivot);
+        this.anim = null;
+        resolve();
+      };
+      if (!duration) { finish(); return; }
+      const anim = { start: performance.now(), dur: duration * (t === 2 ? 1.5 : 1), axis, angle, finish };
+      this.anim = anim;
+      // Falls der Tab im Hintergrund ist (kein requestAnimationFrame), trotzdem fertig werden
+      setTimeout(() => { if (this.anim === anim) finish(); }, anim.dur + 200);
+    });
+  }
+  tick(now) {
+    if (this.anim) {
+      const a = this.anim;
+      const p = Math.min(1, (now - a.start) / a.dur);
+      const e = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      this.pivot.quaternion.setFromAxisAngle(a.axis, a.angle * e);
+      if (p >= 1) a.finish();
+    }
+    this.camera.position.lerp(this.camTarget, 0.08).setLength(10);
+    this.camera.lookAt(0, 0, 0);
+    this.renderer.render(this.scene, this.camera);
+  }
+}
+function snap(g) {
+  g.position.set(Math.round(g.position.x), Math.round(g.position.y), Math.round(g.position.z));
+  const m = new THREE.Matrix4().makeRotationFromQuaternion(g.quaternion);
+  for (const i of [0, 1, 2, 4, 5, 6, 8, 9, 10]) m.elements[i] = Math.round(m.elements[i]);
+  g.quaternion.setFromRotationMatrix(m);
+}
+function roundedSquare(size, rad) {
+  const s = size / 2, sh = new THREE.Shape();
+  sh.moveTo(-s + rad, -s);
+  sh.lineTo(s - rad, -s); sh.quadraticCurveTo(s, -s, s, -s + rad);
+  sh.lineTo(s, s - rad); sh.quadraticCurveTo(s, s, s - rad, s);
+  sh.lineTo(-s + rad, s); sh.quadraticCurveTo(-s, s, -s, s - rad);
+  sh.lineTo(-s, -s + rad); sh.quadraticCurveTo(-s, -s, -s + rad, -s);
+  return new THREE.ShapeGeometry(sh, 4);
+}
+
+/* ---------- Schritt-für-Schritt-Anleitung ---------- */
+let cube3d = null;
+function ensure3D() {
+  if (!cube3d) cube3d = new Cube3D($('stage'));
+  else cube3d.resize();
+  return cube3d;
+}
+const ARROWS = {
+  up: '<path d="M50 6 L90 50 H64 V94 H36 V50 H10 Z" fill="var(--arrow)" stroke="#7a0b3d" stroke-width="3" stroke-linejoin="round"/>',
+  cw: '<path d="M50 22 A30 30 0 1 1 20 52" fill="none" stroke="var(--arrow)" stroke-width="13" stroke-linecap="round"/><polygon points="4,50 36,50 20,26" fill="var(--arrow)"/>',
+};
+function arrowSVG(kind) {
+  const rot = { up: 0, right: 90, down: 180, left: 270 }[kind];
+  if (rot !== undefined) return `<svg viewBox="0 0 100 100"><g transform="rotate(${rot} 50 50)">${ARROWS.up}</g></svg>`;
+  if (kind === 'cw') return `<svg viewBox="0 0 100 100">${ARROWS.cw}</svg>`;
+  return `<svg viewBox="0 0 100 100"><g transform="translate(100 0) scale(-1 1)">${ARROWS.cw}</g></svg>`;
+}
+function startSolve(moves) {
+  S.solution = moves;
+  S.start = S.colors.slice();
+  S.step = 0;
+  S.playing = false;
+  show('s-solve');
+  const c = ensure3D();
+  c.setColors(S.start);
+  const fC = PAL[S.start[22]], uC = PAL[S.start[4]];
+  $('hold-hint').innerHTML = `<div style="font-size:1.6rem">✋</div><div>Immer so halten: <b>${fC.name}</b> <span class="mini" style="background:${fC.hex}"></span> zu dir, <b>${uC.name}</b> <span class="mini" style="background:${uC.hex}"></span> nach oben.</div>`;
+  $('chips').innerHTML = moves.map((m, i) => `<span class="chip" data-i="${i}">${m}</span>`).join('');
+  renderStep();
+}
+function renderStep() {
+  const n = S.solution.length, k = S.step;
+  $('bar').style.width = (100 * k / n) + '%';
+  $('btn-prev').disabled = k === 0 || S.busy;
+  $('btn-next').disabled = k >= n || S.busy;
+  $('btn-play').textContent = S.playing ? '⏸ Anhalten' : '▶ Alles abspielen';
+  document.querySelectorAll('#chips .chip').forEach((c) => {
+    const i = +c.dataset.i;
+    c.className = 'chip' + (i < k ? ' done' : i === k ? ' cur' : '');
+  });
+  if (k >= n) {
+    $('stepinfo').textContent = `Alle ${n} Schritte geschafft!`;
+    $('movetext').innerHTML = '<span class="party">🎉 Der Würfel ist gelöst! Super gemacht!</span>';
+    $('bigarrow').innerHTML = '<div style="font-size:4.5rem;text-align:center">🏆</div>';
+    cube3d.showArrow(null);
+    cube3d.camTarget.set(4.3, 4, 6.8).setLength(10);
+    return;
+  }
+  const m = S.solution[k], d = K.describeMove(m);
+  $('stepinfo').textContent = `Schritt ${k + 1} von ${n}  ·  Zug ${m}`;
+  $('movetext').textContent = d.text;
+  $('bigarrow').innerHTML = arrowSVG(d.arrow) + (d.double ? '<span class="x2">2×</span>' : '');
+  cube3d.showArrow(m);
+  cube3d.viewFace(m[0]);
+}
+async function next(speed = 450) {
+  if (S.busy || S.step >= S.solution.length) return;
+  S.busy = true; renderStep();
+  cube3d.showArrow(null);
+  await cube3d.turn(S.solution[S.step], speed);
+  S.step++;
+  S.busy = false; renderStep();
+}
+async function prev() {
+  if (S.busy || S.step === 0) return;
+  S.busy = true; S.step--; renderStep();
+  cube3d.showArrow(null);
+  await cube3d.turn(K.invertMove(S.solution[S.step]));
+  S.busy = false; renderStep();
+}
+$('btn-next').onclick = () => next();
+$('btn-prev').onclick = () => prev();
+$('btn-restart').onclick = () => { if (S.busy) return; S.playing = false; S.step = 0; cube3d.setColors(S.start); renderStep(); };
+$('btn-edit').onclick = () => { S.playing = false; S.colors = S.start.slice(); openEdit(''); };
+$('btn-play').onclick = async () => {
+  if (S.playing) { S.playing = false; renderStep(); return; }
+  if (S.step >= S.solution.length) { S.step = 0; cube3d.setColors(S.start); }
+  S.playing = true; renderStep();
+  while (S.playing && S.step < S.solution.length) {
+    await sleep(900);
+    if (!S.playing) break;
+    await next();
+  }
+  S.playing = false; renderStep();
+};
+
+buildNet();
+
+/* ---------- Selbsttest: ?selbsttest ---------- */
+async function selfTest() {
+  const log = (s) => { $('testlog').textContent += s + '\n'; };
+  $('testcard').style.display = '';
+  const cases = [
+    "R U R' U' F2 D L' B",
+    "U R2 F B R B2 R U2 L B2 R U' D' R2 F R' L B2 U2 F2", // Superflip
+    "D2 F' L2 B U' R' F2 L D' B2 R2 U F' D R' B L2 U2 R D'",
+  ];
+  let seed = 12345;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+  for (let i = 0; i < 7; i++) cases.push(K.randomScramble(25, rnd).join(' '));
+  await Solver.ready;
+  const results = [];
+  for (const sc of cases) {
+    const colors = K.applyMoves(K.solvedColors(), sc);
+    const v = K.validate(colors);
+    const sol = K.parseMoves(await Solver.solve(v.facelets));
+    const modelOk = K.isSolved(K.applyMoves(colors, sol));
+    S.colors = colors;
+    startSolve(sol);
+    const before = cube3d.readColors();
+    const readOk = before.every((c, i) => c === colors[i]) && !K.isSolved(before);
+    const speed = results.length === 0 ? 40 : 0; // erster Fall mit echter Animation
+    for (let k = 0; k < sol.length; k++) await next(speed);
+    const animOk = K.isSolved(cube3d.readColors());
+    const ok = v.ok && modelOk && readOk && animOk;
+    results.push(ok);
+    log(`${ok ? '✅' : '❌'} Mischung: ${sc}\n   Lösung (${sol.length} Züge): ${sol.join(' ')}\n   Modell gelöst: ${modelOk}, 3D-Würfel gelöst: ${animOk}`);
+  }
+  // Ungültige Würfel müssen erkannt werden
+  const base = K.applyMoves(K.solvedColors(), cases[0]);
+  const flip = base.slice(); [flip[7], flip[19]] = [flip[19], flip[7]]; // UF-Kante umdrehen
+  const twist = base.slice(); [twist[8], twist[9], twist[20]] = [twist[9], twist[20], twist[8]]; // URF-Ecke verdrehen
+  const wrongCount = base.slice(); wrongCount[0] = (wrongCount[0] + 1) % 6;
+  for (const [name, c] of [['Kante umgedreht', flip], ['Ecke verdreht', twist], ['Falsche Anzahl', wrongCount]]) {
+    const v = K.validate(c);
+    results.push(!v.ok);
+    log(`${!v.ok ? '✅' : '❌'} ${name} erkannt: ${v.problems.map((p) => p.text).join(' | ')}`);
+  }
+  const passed = results.filter(Boolean).length;
+  log(`\nErgebnis: ${passed} von ${results.length} Tests bestanden.`);
+  window.__selbsttest = { passed, total: results.length };
+}
+if (new URLSearchParams(location.search).has('selbsttest')) selfTest();
+window.__app = { S, K, startSolve, next, prev, checkAndSolve, ensure3D };
+</script>
+</body>
+</html>
