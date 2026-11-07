@@ -126,7 +126,9 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 /* Ja/Nein-Fenster */
 .modal { position: fixed; inset: 0; background: rgba(20, 10, 50, .55); display: none; align-items: center; justify-content: center; padding: 16px; z-index: 10; }
 .modal.on { display: flex; }
-.modal .card { max-width: 420px; width: 100%; }
+.modal .card { max-width: 420px; width: 100%; max-height: 96dvh; overflow: auto; }
+.camcard { padding: 10px; }
+.camcard .camwrap { max-width: 340px; }
 
 #testlog { white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; max-height: 50vh; overflow: auto; }
 </style>
@@ -147,7 +149,7 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   <div class="stack" style="margin-top:16px">
     <button class="btn big green" id="go-tap">🎨 Farben antippen (am einfachsten)</button>
     <button class="btn big light" id="go-example">🎲 Beispiel-Würfel ausprobieren</button>
-    <button class="btn light" id="go-scan">📷 Mit der Kamera einlesen</button>
+    <button class="btn big light" id="go-scan">📷 Mit Kamera (Seite für Seite)</button>
     <button class="btn light" id="go-manual">🗺️ Ganzer Würfel-Plan (für Profis)</button>
   </div>
   <p class="status" id="solver-status" style="margin-top:14px">🧠 Das Löse-Gehirn wärmt sich auf …</p>
@@ -159,6 +161,8 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
   <h2 id="tap-title">Seite 1 von 6</h2>
   <div class="dots" id="tap-dots"></div>
   <div class="card tapholder" id="tap-hold"></div>
+  <button class="btn green wide" id="tap-photo">📷 Foto von dieser Seite machen</button>
+  <div id="tap-info"></div>
   <div class="bigface" id="bigface"></div>
   <p class="small" style="text-align:center;margin:4px 0 8px">1. Farbe unten antippen&nbsp;&nbsp;2. Kästchen antippen</p>
   <div class="bigpal" id="bigpal"></div>
@@ -259,6 +263,24 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
 </section>
 
 </main>
+
+<div class="modal" id="cam-modal"><div class="card camcard">
+  <div class="tapholder" id="cam2-hold" style="box-shadow:none;margin:0;padding:0 0 8px"></div>
+  <div class="camwrap">
+    <video id="video2" playsinline muted autoplay></video>
+    <div class="grid3"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div>
+    <div class="camhint">Würfel genau ins Gitter halten</div>
+  </div>
+  <p class="small" id="cam2-msg" style="text-align:center"></p>
+  <div class="stack" style="margin-top:8px">
+    <button class="btn big green" id="cam2-shot">📸 Foto!</button>
+    <div class="row">
+      <label class="btn light" for="file2">🖼️ Bild auswählen</label>
+      <button class="btn light" id="cam2-close">✖ Zurück</button>
+    </div>
+    <input type="file" id="file2" accept="image/*" hidden>
+  </div>
+</div></div>
 
 <div class="modal" id="modal"><div class="card">
   <p id="modal-text" style="font-weight:700"></p>
@@ -2658,6 +2680,55 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
     return cluster.map(function (k) { return best[k]; });
   }
 
+  // Farbe eines Kästchens bestimmen, wenn die echte Farbe der Mitte (im selben Foto) bekannt ist
+  function classifyWithCenter(rgb, centerRgb, centerId) {
+    // Helligkeit (bei weißer Mitte auch Farbstich) anhand der Mitte ausgleichen
+    var ref = PALETTE[centerId].cam, sum = function (v) { return v[0] + v[1] + v[2]; };
+    var g = Math.min(2.5, Math.max(0.4, sum(centerRgb) / sum(ref)));
+    var gains = [g, g, g];
+    if (centerId === 0) gains = centerRgb.map(function (v, i) { return Math.min(2.5, Math.max(0.4, v / ref[i])); });
+    var corr = rgb.map(function (v, i) { return Math.min(255, v / gains[i]); });
+    var f = feat(corr), best = 0, bd = Infinity;
+    PAL_LAB.forEach(function (r, k) { var d = labDist(f, r); if (d < bd) { bd = d; best = k; } });
+    return best;
+  }
+
+  // ----- Fehler-Helfer: kleinste Änderung finden, die den Würfel lösbar macht -----
+  // Gibt eine Liste von Vorschlägen zurück (die einfachsten zuerst), oder [] wenn nichts gefunden
+  function findRepairs(colors) {
+    if (validate(colors).ok) return [];
+    var cnt = [0, 0, 0, 0, 0, 0];
+    for (var i = 0; i < 54; i++) { if (!(colors[i] >= 0)) return []; cnt[colors[i]]++; }
+    if (cnt.some(function (n) { return n !== 9; })) return [];
+    var diff = function (c) { var d = []; for (var j = 0; j < 54; j++) if (c[j] !== colors[j]) d.push(j); return d; };
+    var out = [], f, r, c;
+    // 1) Eine Seite gedreht eingegeben?
+    for (f = 0; f < 6; f++) {
+      c = colors;
+      for (r = 1; r < 4; r++) {
+        c = rotateFaceCW(c, f);
+        if (validate(c).ok) out.push({ kind: 'rotate', face: f, colors: c, changed: diff(c) });
+      }
+    }
+    // 2) Zwei Kästchen vertauscht?
+    for (var a = 0; a < 54; a++) {
+      if (a % 9 === 4) continue;
+      for (var b = a + 1; b < 54; b++) {
+        if (b % 9 === 4 || colors[a] === colors[b]) continue;
+        c = colors.slice(); c[a] = colors[b]; c[b] = colors[a];
+        if (validate(c).ok) out.push({ kind: 'swap', colors: c, changed: [a, b] });
+      }
+    }
+    if (out.length) return out.slice(0, 30);
+    // 3) Zwei Seiten gedreht?
+    for (var code = 0; code < 4096 && out.length < 30; code++) {
+      var q = code, n = 0; c = colors;
+      for (f = 0; f < 6; f++) { r = q % 4; q = Math.floor(q / 4); if (r) n++; for (var k = 0; k < r; k++) c = rotateFaceCW(c, f); }
+      if (n === 2 && validate(c).ok) out.push({ kind: 'rotate2', colors: c, changed: diff(c) });
+    }
+    return out;
+  }
+
   // ----- Zufälliges Mischen -----
   function randomScramble(n, rnd) {
     rnd = rnd || Math.random;
@@ -2678,6 +2749,7 @@ details summary { cursor: pointer; font-weight: 700; padding: 6px 0; }
     invertMove: invertMove, turnsOf: turnsOf, solvedColors: solvedColors, isSolved: isSolved,
     rotateFaceCW: rotateFaceCW, validate: validate, describeMove: describeMove, FACE_NAME: FACE_NAME,
     rgb2hsv: rgb2hsv, rgb2lab: rgb2lab, classifyQuick: classifyQuick, assignColors: assignColors,
+    classifyWithCenter: classifyWithCenter, findRepairs: findRepairs,
     randomScramble: randomScramble
   };
 })(typeof window !== 'undefined' ? window : globalThis);
@@ -2760,6 +2832,7 @@ const S = {
 function show(id) {
   document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('on', s.id === id));
   if (id !== 's-scan') stopCamera();
+  if (id !== 's-tap') camClose();
   window.scrollTo(0, 0);
 }
 const colorHex = (c) => (c >= 0 ? PAL[c].hex : 'var(--empty)');
@@ -2897,11 +2970,12 @@ $('btn-scan-back').onclick = () => {
   show('s-start');
 };
 $('btn-scan-manual').onclick = () => startManual();
-$('go-scan').onclick = () => {
+// Alter Scan-Ablauf (alle 6 Fotos hintereinander) – erreichbar über ?scan
+function startOldScan() {
   S.scanStep = 0; S.pending = null; S.samples = new Array(54).fill(null);
   S.colors = new Array(54).fill(-1);
   show('s-scan'); renderScan(); startCamera();
-};
+}
 
 /* ---------- Würfel-Plan (Eingabe & Korrektur) ---------- */
 const NET_POS = { U: [0, 3], L: [3, 0], F: [3, 3], R: [3, 6], B: [3, 9], D: [6, 3] };
@@ -2987,13 +3061,36 @@ $('btn-clear').onclick = async () => { if (await ask('Wirklich alle Farben lösc
 $('btn-home').onclick = () => show('s-start');
 $('btn-check').onclick = checkAndSolve;
 
+function showProblems(v) {
+  badCells = new Set(v.problems.flatMap((p) => p.cells));
+  renderNet();
+  setMsg(`<h2>🤔 Da stimmt etwas nicht</h2><ul>${v.problems.map((p) => `<li>${p.text}</li>`).join('')}</ul><p>Vergleiche mit deinem Würfel und tippe falsche Felder hier im Plan an – oder geh auf <b>„🎨 Seiten antippen“</b>.</p>`, 'problems');
+  $('edit-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+// Fehler-Helfer: Vorschlag zeigen, das Kind vergleicht mit dem echten Würfel
+function showRepair(list, idx, orig) {
+  const fix = list[idx];
+  S.colors = fix.colors.slice();
+  badCells = new Set(fix.changed);
+  renderNet();
+  let what;
+  if (fix.kind === 'rotate') what = `Ich glaube, die Seite mit der <b>${PAL[orig[fix.face * 9 + 4]].adj}n Mitte</b> war verdreht eingegeben. Ich habe sie gedreht.`;
+  else if (fix.kind === 'swap') what = 'Ich glaube, <b>zwei Kästchen</b> waren vertauscht. Ich habe sie getauscht.';
+  else what = 'Ich glaube, <b>zwei Seiten</b> waren verdreht eingegeben. Ich habe sie gedreht.';
+  const more = list.length > 1 ? `<button class="btn light" id="fix-next">🔄 Anderer Vorschlag (${idx + 1} von ${list.length})</button>` : '';
+  setMsg(`<h2>🔧 Ich habe den Fehler gefunden!</h2><p>${what}</p><p>Die <b>blinkenden Kästchen</b> im Plan oben habe ich geändert. Schau auf deinen echten Würfel: <b>Sieht es jetzt genau so aus?</b></p>
+    <div class="stack"><button class="btn big green" id="fix-yes">✅ Ja, so ist es – lösen!</button>${more}<button class="btn light" id="fix-no">✖ Nein, ich suche selbst</button></div>`, 'okbox');
+  $('net').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  $('fix-yes').onclick = () => { badCells = new Set(); renderNet(); checkAndSolve(); };
+  if (more) $('fix-next').onclick = () => showRepair(list, (idx + 1) % list.length, orig);
+  $('fix-no').onclick = () => { S.colors = orig.slice(); showProblems(K.validate(S.colors)); };
+}
 async function checkAndSolve() {
   const v = K.validate(S.colors);
   if (!v.ok) {
-    badCells = new Set(v.problems.flatMap((p) => p.cells));
-    renderNet();
-    setMsg(`<h2>🤔 Da stimmt etwas nicht</h2><ul>${v.problems.map((p) => `<li>${p.text}</li>`).join('')}</ul><p>Vergleiche mit deinem Würfel und tippe falsche Felder hier im Plan an – oder geh auf <b>„🎨 Seiten antippen“</b>.</p>`, 'problems');
-    $('edit-msg').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const repairs = K.findRepairs(S.colors);
+    if (repairs.length) { showRepair(repairs, 0, S.colors.slice()); return; }
+    showProblems(v);
     return;
   }
   if (K.isSolved(S.colors)) {
@@ -3371,18 +3468,67 @@ $('bigpal').onclick = (e) => {
   S.paint = +b.dataset.c;
   renderTap();
 };
-$('tap-back').onclick = () => { if (tapStep > 0) { tapStep--; renderTap(); window.scrollTo(0, 0); } else show('s-start'); };
+$('tap-back').onclick = () => { $('tap-info').innerHTML = ''; if (tapStep > 0) { tapStep--; renderTap(); window.scrollTo(0, 0); } else show('s-start'); };
 $('tap-next').onclick = () => {
-  if (tapStep < 5) { tapStep++; renderTap(); window.scrollTo(0, 0); return; }
+  $('tap-info').innerHTML = '';
+  if (tapStep < 5) { tapStep++; renderTap(); window.scrollTo(0, 0); if (S.camMode) camOpen(); return; }
   S.scrambleText = '';
   openEdit('');
   checkAndSolve();
 };
+/* ---------- Kamera pro Seite (im Antipp-Modus) ---------- */
+var stream2 = null;
+async function camOpen() {
+  const face = TAP_ORDER[tapStep];
+  $('cam2-hold').innerHTML = `${cubePic(face)}<div class="say">${tapHoldText(face)}</div>`;
+  $('cam2-msg').textContent = '';
+  $('cam-modal').classList.add('on');
+  if (stream2) return;
+  try {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('keine Kamera');
+    stream2 = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } }, audio: false });
+    $('video2').srcObject = stream2;
+    await $('video2').play().catch(() => {});
+    $('cam2-shot').disabled = false;
+  } catch (err) {
+    $('cam2-msg').textContent = 'Die Kamera geht hier nicht. Du kannst ein Bild auswählen – oder die Farben einfach antippen.';
+    $('cam2-shot').disabled = true;
+  }
+}
+function camClose() {
+  $('cam-modal').classList.remove('on');
+  if (stream2) { stream2.getTracks().forEach((tr) => tr.stop()); stream2 = null; }
+}
+function camUse(samples) {
+  const face = TAP_ORDER[tapStep], fi = K.FACES.indexOf(face), cid = K.SCHEME[face];
+  for (let k = 0; k < 9; k++) if (k !== 4) S.colors[fi * 9 + k] = K.classifyWithCenter(samples[k], samples[4], cid);
+  camClose();
+  $('tap-info').innerHTML = '<div class="card okbox">📷 Fertig! <b>Stimmen die Farben?</b> Falsche Kästchen einfach antippen und verbessern.</div>';
+  renderTap();
+}
+$('cam2-shot').onclick = () => {
+  const v = $('video2');
+  if (!v.videoWidth) return;
+  camUse(sampleGrid(v, v.videoWidth, v.videoHeight));
+};
+$('file2').onchange = (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => { camUse(sampleGrid(img, img.naturalWidth, img.naturalHeight)); URL.revokeObjectURL(img.src); e.target.value = ''; };
+  img.src = URL.createObjectURL(f);
+};
+$('cam2-close').onclick = camClose;
+$('tap-photo').onclick = camOpen;
+$('go-scan').onclick = () => { $('go-tap').onclick(); S.camMode = true; camOpen(); };
+
 $('btn-tapmode').onclick = () => { tapStep = 0; show('s-tap'); renderTap(); };
 $('go-tap').onclick = () => {
   S.colors = new Array(54).fill(-1);
   K.FACES.forEach((f, fi) => { S.colors[fi * 9 + 4] = K.SCHEME[f]; });
   tapStep = 0;
+  S.camMode = false;
+  $('tap-info').innerHTML = '';
   show('s-tap');
   renderTap();
 };
@@ -3432,6 +3578,7 @@ async function selfTest() {
   window.__selbsttest = { passed, total: results.length };
 }
 if (new URLSearchParams(location.search).has('selbsttest')) selfTest();
+if (new URLSearchParams(location.search).has('scan')) startOldScan();
 window.__app = { S, K, startSolve, next, prev, checkAndSolve, ensure3D };
 </script>
 </body>
